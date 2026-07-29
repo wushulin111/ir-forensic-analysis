@@ -1,0 +1,220 @@
+﻿[
+    {
+        "rule_id":  "INJ-0001",
+        "type":  "page_rwx",
+        "name":  "RWX内存区域",
+        "description":  "可写且可执行的内存区域，进程注入典型指标",
+        "pattern":  "PAGE_EXECUTE_READWRITE|0x40\\s*\\(PAGE_EXECUTE_READWRITE\\)",
+        "severity":  "critical",
+        "confidence":  0.85,
+        "mitre_attack":  "T1055",
+        "created_at":  "2026-01-01",
+        "hit_count":  0
+    },
+    {
+        "rule_id":  "INJ-0002",
+        "type":  "reflective_dll",
+        "name":  "反射式DLL加载",
+        "description":  "检测反射式DLL注入特征",
+        "pattern":  "ReflectiveLoader|LoadLibraryA.*GetProcAddress",
+        "severity":  "critical",
+        "confidence":  0.9,
+        "mitre_attack":  "T1055.001",
+        "created_at":  "2026-01-01",
+        "hit_count":  0
+    },
+    {
+        "rule_id":  "INJ-0003",
+        "type":  "process_hollowing",
+        "name":  "进程空心化",
+        "description":  "创建挂起进程并替换内存映像",
+        "pattern":  "NtUnmapViewOfSection|CREATE_SUSPENDED.*WriteProcessMemory",
+        "severity":  "critical",
+        "confidence":  0.9,
+        "mitre_attack":  "T1055.012",
+        "created_at":  "2026-01-01",
+        "hit_count":  0
+    },
+    {
+        "rule_id":  "INJ-0004",
+        "type":  "beacon_cobaltstrike",
+        "name":  "Cobalt Strike Beacon",
+        "description":  "Cobalt Strike beacon特征码",
+        "pattern":  "%s \\(admin\\)|sleeptime|jitter|beacon\\.dll",
+        "severity":  "critical",
+        "confidence":  0.95,
+        "mitre_attack":  "T1071.001",
+        "created_at":  "2026-01-01",
+        "hit_count":  0
+    },
+    {
+        "rule_id":  "INJ-0005",
+        "type":  "beacon_sliver",
+        "name":  "Sliver C2 Implant",
+        "description":  "Sliver C2框架特征",
+        "pattern":  "sliver\\.exe|ImplantConfig|C2.*mTLS|WireGuard.*sliver",
+        "severity":  "critical",
+        "confidence":  0.9,
+        "mitre_attack":  "T1071.001",
+        "created_at":  "2026-01-01",
+        "hit_count":  0
+    },
+    {
+        "rule_id":  "INJ-0006",
+        "type":  "unbacked_executable",
+        "name":  "无文件备份的可执行内存",
+        "description":  "可执行内存区域无对应磁盘文件",
+        "pattern":  "malfind.*MZ.*PAGE_EXECUTE",
+        "severity":  "critical",
+        "confidence":  0.85,
+        "mitre_attack":  "T1055",
+        "created_at":  "2026-01-01",
+        "hit_count":  0
+    },
+    {
+        "rule_id":  "INJ-0007",
+        "type":  "thread_anomaly",
+        "name":  "异常线程起点",
+        "description":  "线程起始地址不在任何已加载模块范围内",
+        "pattern":  "thread.*start.*outside.*module|StartAddress.*0x[0-9a-f]{8,}",
+        "severity":  "high",
+        "confidence":  0.75,
+        "mitre_attack":  "T1055.003",
+        "created_at":  "2026-01-01",
+        "hit_count":  0
+    },
+    {
+        "rule_id":  "INJ-0008",
+        "type":  "ntdll_unhooking",
+        "name":  "ntdll Unhooking（用户态致盲EDR）",
+        "description":  "银狐从磁盘重新读取ntdll.dll覆盖已加载ntdll的.text节，绕过EDR的API HOOK。检测ntdll.dll是否被重新映射",
+        "pattern":  "ntdll\\.dll.*re-?map|ReadFile.*ntdll|NtCreateSection.*ntdll|NtMapViewOfSection.*ntdll",
+        "indicators":  [
+                           "进程加载的ntdll.dll路径为磁盘重新映射",
+                           "ntdll.dll的.text节被覆盖",
+                           "RtlDecompressBuffer调用"
+                       ],
+        "severity":  "critical",
+        "confidence":  0.9,
+        "mitre_attack":  "T1562.001",
+        "created_at":  "2026-05-09",
+        "hit_count":  0
+    },
+    {
+        "rule_id":  "INJ-0009",
+        "type":  "pool_party",
+        "name":  "PoolParty线程池注入",
+        "description":  "银狐使用PoolParty技术，通过PostQueuedCompletionStatus/ZwSetIoCompletion向线程池注入shellcode",
+        "pattern":  "PostQueuedCompletionStatus|ZwSetIoCompletion|NtSetIoCompletion",
+        "severity":  "critical",
+        "confidence":  0.9,
+        "mitre_attack":  "T1055.012",
+        "created_at":  "2026-05-09",
+        "hit_count":  0
+    },
+    {
+        "rule_id":  "INJ-0010",
+        "type":  "svchost_injection",
+        "name":  "svchost进程注入",
+        "description":  "银狐提权后打开svchost.exe写入shellcode，是远端拉取shellcode攻击链的典型环节",
+        "pattern":  "OpenProcess.*svchost|WriteProcessMemory.*svchost|CreateRemoteThread.*svchost",
+        "severity":  "critical",
+        "confidence":  0.85,
+        "mitre_attack":  "T1055.001",
+        "created_at":  "2026-05-09",
+        "hit_count":  0
+    },
+    {
+        "rule_id":  "INJ-0011",
+        "type":  "browser_jit_fp",
+        "name":  "浏览器JIT RWX误报过滤",
+        "description":  "Chrome/Edge/Firefox/Opera/Brave等浏览器的JIT编译器产生的RWX内存，小于1MB时视为正常",
+        "pattern":  "(chrome|msedge|firefox|opera|brave).*PAGE_EXECUTE_READWRITE.*MEM_PRIVATE",
+        "severity":  "low",
+        "confidence":  0.5,
+        "mitre_attack":  "T1055",
+        "created_at":  "2026-05-24",
+        "hit_count":  0,
+        "false_positive":  true,
+        "filter":  {
+                       "condition":  "processName matches browser list AND sizeKB \u003c 1024 AND type == MEM_PRIVATE",
+                       "action":  "downgrade_to_info"
+                   }
+    },
+    {
+        "rule_id":  "INJ-0012",
+        "type":  "legitimate_rat_rwx",
+        "name":  "合法远控软件RWX内存",
+        "description":  "向日葵(AweSun)、TeamViewer、AnyDesk等合法远控软件的大块RWX内存（通常\u003e50MB），需结合上下文判断",
+        "pattern":  "(AweSun|awesun|TeamViewer|AnyDesk|Splashtop).*PAGE_EXECUTE_READWRITE.*MEM_IMAGE",
+        "severity":  "medium",
+        "confidence":  0.6,
+        "mitre_attack":  "T1055",
+        "created_at":  "2026-05-24",
+        "hit_count":  0,
+        "false_positive":  true,
+        "note":  "合法远控软件的正常行为，但若被攻击者利用可作为持久化后门。需检查：1)是否在预期目录 2)是否有数字签名 3)启动方式是否正常"
+    },
+    {
+        "rule_id":  "INJ-0013",
+        "type":  "large_private_rwx",
+        "name":  "大块无模块RWX内存",
+        "description":  "大于10MB的MEM_PRIVATE类型RWX内存且无对应模块名，可能为shellcode/beacon加载区",
+        "pattern":  "PAGE_EXECUTE_READWRITE.*MEM_PRIVATE",
+        "severity":  "high",
+        "confidence":  0.7,
+        "mitre_attack":  "T1055",
+        "created_at":  "2026-05-24",
+        "hit_count":  0,
+        "filter":  {
+                       "condition":  "sizeKB \u003e 10240 AND moduleName is empty AND processName not in browser list",
+                       "action":  "escalate_to_high"
+                   }
+    },
+    {
+        "rule_id":  "INJ-0014",
+        "type":  "powershell_clr_rwx",
+        "name":  "PowerShell CLR运行时RWX",
+        "description":  "PowerShell加载.NET CLR时产生的RWX内存，含有clr.dll模块名时为正常行为",
+        "pattern":  "powershell.*PAGE_EXECUTE_READWRITE.*clr\\\\.dll",
+        "severity":  "low",
+        "confidence":  0.4,
+        "mitre_attack":  "T1055",
+        "created_at":  "2026-05-24",
+        "hit_count":  0,
+        "false_positive":  true
+    },
+    {
+        "rule_id":  "INJ-0015",
+        "type":  "electron_jit_rwx",
+        "name":  "Electron框架JIT RWX",
+        "description":  "基于Electron的应用(Codex/WeChat/Douyin/QQ等)的V8 JIT编译器产生的RWX内存",
+        "pattern":  "(Codex|WeChat|Weixin|Douyin|QQ|qmbrowser).*PAGE_EXECUTE_READWRITE.*MEM_PRIVATE",
+        "severity":  "low",
+        "confidence":  0.3,
+        "mitre_attack":  "T1055",
+        "created_at":  "2026-05-24",
+        "hit_count":  0,
+        "false_positive":  true,
+        "filter":  {
+                       "condition":  "processName matches electron app list AND sizeKB \u003c 102400",
+                       "action":  "downgrade_to_info"
+                   }
+    },
+    {
+        "rule_id":  "INJ-0016",
+        "type":  "service_private_rwx",
+        "name":  "系统服务无模块RWX",
+        "description":  "系统服务进程中的MEM_PRIVATE类型RWX区域且无模块名，可能为服务劫持",
+        "pattern":  "PAGE_EXECUTE_READWRITE.*MEM_PRIVATE",
+        "severity":  "high",
+        "confidence":  0.75,
+        "mitre_attack":  "T1055",
+        "created_at":  "2026-05-24",
+        "hit_count":  0,
+        "filter":  {
+                       "condition":  "type == MEM_PRIVATE AND moduleName is empty AND processName matches (cameraservice|wlms|wisvc|QoE_Agent|HipsDaemon)",
+                       "action":  "escalate_to_high"
+                   }
+    }
+]

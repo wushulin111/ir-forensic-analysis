@@ -1,0 +1,193 @@
+[
+  {
+    "rule_id": "RANS-F001",
+    "family": "Phobos",
+    "aliases": ["jopanaxye", "2700", "Dharma变种"],
+    "platforms": ["Windows"],
+    "ransom_note_patterns": ["HOW_TO_DECRYPT.txt", "info.hta", "info.ico", "HOW_TO_RESTORE_FILES"],
+    "encrypted_extensions": [".phobos", ".jopanaxye", ".2700", ".dewar", ".king", ".actin", ".adage", ".adame", ".acute"],
+    "encryption_algorithm": "AES-256 + RSA-1024",
+    "intrusion_methods": ["RDP暴力破解", "3389端口暴露", "弱口令RDP"],
+    "ioc_features": [
+      "勒索信标题含Phobos",
+      "邮件联系 bestcor@tutanota.com / helpers@airmail.cc",
+      "Tor支付页面 *.onion",
+      "受害者ID嵌入勒索信",
+      "多个后门同时部署"
+    ],
+    "lateral_indicators": ["部署多个后门", "横向传播到同网段服务器", "RDP凭据窃取后横向"],
+    "known_false_positives": [],
+    "severity": "critical",
+    "confidence": 0.95,
+    "mitre_attack": ["T1021.001", "T1110.001", "T1486"],
+    "reference": "Solar：Phobos勒索病毒jopanaxye/2700变种，12台服务器3.97TB数据恢复",
+    "created_at": "2026-05-14"
+  },
+  {
+    "rule_id": "RANS-F002",
+    "family": "Hunters International",
+    "aliases": ["Hive演变版本", "Hunters"],
+    "platforms": ["Windows", "Linux"],
+    "ransom_note_patterns": ["README.hta", "README.txt", "CONTACT_US.txt"],
+    "encrypted_extensions": [".hunters", ".locked", ".hunter"],
+    "encryption_algorithm": "ChaCha20 + RSA-OAEP",
+    "intrusion_methods": ["RDP暴力破解", "VPN漏洞", "钓鱼邮件", "供应链攻击"],
+    "ioc_features": [
+      "RaaS运营模式",
+      "DLS数据泄露网站",
+      "双重勒索（加密+数据泄露）",
+      "Hive勒索代码基础",
+      "暗网泄露平台展示受害者数据"
+    ],
+    "lateral_indicators": ["Cobalt Strike横向", "RDP横向", "PsExec"],
+    "known_false_positives": [],
+    "severity": "critical",
+    "confidence": 0.90,
+    "mitre_attack": ["T1021.001", "T1190", "T1486", "T1561"],
+    "reference": "Solar：某上市企业两度遭同一Hunters团伙勒索",
+    "created_at": "2026-05-14"
+  },
+  {
+    "rule_id": "RANS-F003",
+    "family": "mallox",
+    "aliases": ["Mallox", "Fargo", "rmallox"],
+    "platforms": ["Windows", "Linux"],
+    "ransom_note_patterns": ["!!!YOUR_FILES_ARE_ENCRYPTED!!!.README.txt", "HowToRecover.txt", "RESTORE_FILES.txt"],
+    "encrypted_extensions": [".mallox", ".rmallox", ".fargo", ".malox"],
+    "encryption_algorithm": "AES-CBC + RSA",
+    "intrusion_methods": ["NAS系统漏洞", "Tomcat漏洞", "SQL注入", "Web应用漏洞"],
+    "ioc_features": [
+      ".mallox后缀",
+      "勒索信Markdown格式",
+      "Tor支付页面 *.onion",
+      "NAS设备作为入侵入口"
+    ],
+    "lateral_indicators": ["NAS横向到内网服务器", "Web漏洞入口"],
+    "known_false_positives": [],
+    "severity": "critical",
+    "confidence": 0.95,
+    "mitre_attack": ["T1190", "T1486"],
+    "reference": "Solar：NAS系统服务器漏洞入侵，24小时完成数据解密和系统修复",
+    "created_at": "2026-05-14"
+  },
+  {
+    "rule_id": "RANS-F004",
+    "family": "BEAST",
+    "aliases": ["Monster", "Beast"],
+    "platforms": ["Windows", "Linux", "ESXi"],
+    "ransom_note_patterns": ["How_To_Recover.txt", "README_TO_RECOVER.txt", "RECOVER.txt"],
+    "encrypted_extensions": [".beast", ".monster", ".enc", ".locked"],
+    "encryption_algorithm": "XChaCha20 + Curve25519",
+    "intrusion_methods": ["ESXi SSH暴力破解", "vCenter漏洞CVE-2021-21985", "RDP弱口令", "VPN漏洞"],
+    "ioc_features": [
+      "支持加密VMFS和VMX",
+      "Linux版ELF静态编译",
+      "VirtualBox/VMware检测",
+      "图形化勒索界面(Windows版)",
+      "免杀使用代码混淆+反调试"
+    ],
+    "lateral_indicators": [
+      "检测VMware/VirtualBox工具",
+      "批量加密虚拟机虚拟磁盘",
+      "ESXi主机SSH暴力破解成功后批量关VM"
+    ],
+    "vm_encryption_targets": [".vmdk", ".vmx", ".vmsn", ".vswp", ".vmem", ".vhd", ".vhdx"],
+    "known_false_positives": [],
+    "severity": "critical",
+    "confidence": 0.90,
+    "mitre_attack": ["T1021.001", "T1190", "T1486", "T1561"],
+    "reference": "Solar：BEAST勒索软件(Linux/ESXi版)加密机制与对抗策略",
+    "created_at": "2026-05-14"
+  },
+  {
+    "rule_id": "RANS-F005",
+    "family": "MedusaLocker",
+    "aliases": ["Medusa"],
+    "platforms": ["Windows"],
+    "ransom_note_patterns": ["READ_NOTE_MedusaLocker.txt", "HOW_TO_RECOVER.hta", "!!!READ_ME!!!.txt"],
+    "encrypted_extensions": [".medusalocker", ".encrypted", ".locked", ".medusa"],
+    "encryption_algorithm": "AES-256 + RSA-2048（每次生成随机AES密钥）",
+    "intrusion_methods": ["RDP暴力破解", "钓鱼邮件", "漏洞利用"],
+    "ioc_features": [
+      "勒索信嵌入受害人ID",
+      "实时聊天支付页面",
+      "72小时时限递增勒索额",
+      "删除卷影副本",
+      "禁用Windows恢复"
+    ],
+    "lateral_indicators": ["RDP横向", "PsExec", "SMB共享传播"],
+    "known_false_positives": [],
+    "severity": "critical",
+    "confidence": 0.90,
+    "mitre_attack": ["T1021.001", "T1110.001", "T1486", "T1490"],
+    "reference": "Solar：深入剖析MedusaLocker勒索家族：从密钥生成到文件加密",
+    "created_at": "2026-05-14"
+  },
+  {
+    "rule_id": "RANS-F006",
+    "family": "babyk",
+    "aliases": ["babyk勒索"],
+    "platforms": ["Windows", "Linux"],
+    "ransom_note_patterns": ["babyk.txt", "README.txt", "HOW_TO_DECRYPT.txt"],
+    "encrypted_extensions": [".babyk", ".babyk1", ".babyk2"],
+    "encryption_algorithm": "AES-256 + RSA",
+    "intrusion_methods": ["用友NC系统漏洞", "内网渗透工具横向", "国产内网工具辅助"],
+    "ioc_features": [
+      "利用国产内网渗透工具",
+      "批量加密数十台虚拟机",
+      "22.45TB数据恢复案例",
+      "用友NC漏洞作为入口"
+    ],
+    "lateral_indicators": ["内网渗透工具横向移动", "虚拟机批量加密", "用友NC→内网代理→其他服务器"],
+    "known_false_positives": [],
+    "severity": "critical",
+    "confidence": 0.85,
+    "mitre_attack": ["T1190", "T1021", "T1486"],
+    "reference": "Solar：利用国产内网渗透工具勒索数十台虚拟机babyk解密恢复",
+    "created_at": "2026-05-14"
+  },
+  {
+    "rule_id": "RANS-F007",
+    "family": ".sorry",
+    "aliases": ["sorry勒索"],
+    "platforms": ["Windows"],
+    "ransom_note_patterns": ["README.sorry.txt", "SORRY.txt"],
+    "encrypted_extensions": [".sorry"],
+    "encryption_algorithm": "AES + RSA",
+    "intrusion_methods": ["银狐木马关联", "钓鱼邮件", "远控木马投放"],
+    "ioc_features": [
+      "银狐木马关联",
+      "定向勒索",
+      "远控木马先行植入"
+    ],
+    "lateral_indicators": ["银狐C2→勒索投放", "远控木马→横向→加密"],
+    "known_false_positives": [],
+    "severity": "critical",
+    "confidence": 0.85,
+    "mitre_attack": ["T1486", "T1059", "T1562"],
+    "reference": "Solar：近期.sorry勒索病毒深度溯源与攻击路径复盘",
+    "created_at": "2026-05-14"
+  },
+  {
+    "rule_id": "RANS-F008",
+    "family": "Hive",
+    "aliases": ["Hive勒索"],
+    "platforms": ["Windows", "Linux"],
+    "ransom_note_patterns": ["README.txt", "HOW_TO_DECRYPT.txt"],
+    "encrypted_extensions": [".hive", ".key", ".hived"],
+    "encryption_algorithm": "AES-256 + RSA-2048",
+    "intrusion_methods": ["RDP暴力破解", "钓鱼邮件", "VPN漏洞", "Exchange漏洞"],
+    "ioc_features": [
+      "Hive勒索信",
+      "数据泄露网站",
+      "双重勒索",
+      "可能演变为Hunters International"
+    ],
+    "lateral_indicators": ["RDP横向", "Cobalt Strike"],
+    "known_false_positives": [],
+    "severity": "critical",
+    "confidence": 0.90,
+    "mitre_attack": ["T1021.001", "T1190", "T1486", "T1561"],
+    "created_at": "2026-05-14"
+  }
+]

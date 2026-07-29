@@ -1,0 +1,101 @@
+[
+  {
+    "rule_id": "LAT-0001",
+    "type": "smb_scan",
+    "name": "SMB内网扫描",
+    "description": "同一源IP在短时间内连接多个目标的445端口",
+    "pattern": ":445\\s+(ESTABLISHED|SYN_SENT)",
+    "severity": "high",
+    "confidence": 0.8,
+    "mitre_attack": "T1021.002",
+    "threshold": "同一源IP 5分钟内连接>5个不同目标",
+    "created_at": "2026-01-01",
+    "hit_count": 0
+  },
+  {
+    "rule_id": "LAT-0002",
+    "type": "rdp_bruteforce",
+    "name": "RDP暴力破解",
+    "description": "大量RDP连接尝试",
+    "pattern": ":3389\\s+(SYN_SENT|ESTABLISHED)",
+    "severity": "critical",
+    "confidence": 0.85,
+    "mitre_attack": "T1021.001",
+    "threshold": "同一源IP 10分钟内>20次连接尝试",
+    "created_at": "2026-01-01",
+    "hit_count": 0
+  },
+  {
+    "rule_id": "LAT-0003",
+    "type": "ssh_bruteforce",
+    "name": "SSH暴力破解",
+    "description": "大量SSH连接尝试",
+    "pattern": ":22\\s+(SYN_SENT|ESTABLISHED)",
+    "severity": "critical",
+    "confidence": 0.85,
+    "mitre_attack": "T1021.004",
+    "threshold": "同一源IP 10分钟内>20次连接尝试",
+    "created_at": "2026-01-01",
+    "hit_count": 0
+  },
+  {
+    "rule_id": "LAT-0004",
+    "type": "psexec_deploy",
+    "name": "PsExec远程部署",
+    "description": "PsExec服务部署痕迹",
+    "pattern": "PSEXESVC\\.exe|\\\\ADMIN\\$|psexec\\.exe",
+    "severity": "high",
+    "confidence": 0.85,
+    "mitre_attack": "T1021.002",
+    "created_at": "2026-01-01",
+    "hit_count": 0
+  },
+  {
+    "rule_id": "LAT-0005",
+    "type": "wmi_remote",
+    "name": "WMI远程执行",
+    "description": "WMI远程命令执行痕迹",
+    "pattern": "wmic\\s+.*/node:|Invoke-WmiMethod|Invoke-CimMethod",
+    "severity": "high",
+    "confidence": 0.8,
+    "mitre_attack": "T1047",
+    "created_at": "2026-01-01",
+    "hit_count": 0
+  },
+  {
+    "rule_id": "LAT-0006",
+    "type": "pass_the_hash",
+    "name": "哈希传递攻击",
+    "description": "使用哈希而非密码进行认证",
+    "pattern": "mimikatz.*sekurlsa::pth|pth-smbclient|pth-winexe|Kerberos\\s+TGT.*NTLM",
+    "severity": "critical",
+    "confidence": 0.9,
+    "mitre_attack": "T1550.002",
+    "created_at": "2026-01-01",
+    "hit_count": 0
+  },
+  {
+    "rule_id": "LAT-0007",
+    "type": "winrm_remote",
+    "name": "WinRM远程管理",
+    "description": "通过WinRM进行远程命令执行",
+    "pattern": ":5985\\s+ESTABLISHED|WinRM|Enter-PSSession|Invoke-Command.*-ComputerName",
+    "severity": "high",
+    "confidence": 0.75,
+    "mitre_attack": "T1021.006",
+    "created_at": "2026-01-01",
+    "hit_count": 0
+  },
+  {
+    "rule_id": "LAT-0008",
+    "type": "data_staging",
+    "name": "数据暂存",
+    "description": "大量内网文件传输/共享访问",
+    "pattern": "\\\\C\\$|\\\\ADMIN\\$|\\\\IPC\\$|net\\s+use.*\\\\\\\\",
+    "severity": "medium",
+    "confidence": 0.65,
+    "mitre_attack": "T1560",
+    "created_at": "2026-01-01",
+    "hit_count": 0
+  }
+]

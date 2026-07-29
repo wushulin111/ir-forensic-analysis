@@ -1,0 +1,320 @@
+[
+  {
+    "rule_id": "PERS-0001",
+    "type": "registry_run",
+    "name": "注册表Run键持久化",
+    "description": "注册表Run/RunOnce键中指向可疑路径的程序",
+    "pattern": "(Software\\\\Microsoft\\\\Windows\\\\CurrentVersion\\\\(Run|RunOnce|RunOnceEx)).*(Temp|AppData|Users|Public|ProgramData)",
+    "known_false_positives": [
+      {"condition": "process=OneDrive|Teams|Discord|Slack", "note": "AppData安装的合法应用自启动"},
+      {"condition": "process=Microsoft|Windows", "note": "微软官方产品自启动项"}
+    ],
+    "severity": "critical",
+    "confidence": 0.9,
+    "mitre_attack": "T1547.001",
+    "created_at": "2026-01-01",
+    "hit_count": 0
+  },
+  {
+    "rule_id": "PERS-0002",
+    "type": "encoded_startup",
+    "name": "编码命令启动",
+    "description": "启动项使用PowerShell编码命令",
+    "pattern": "(powershell|cmd).*(-enc|-encodedcommand|FromBase64String|base64)",
+    "known_false_positives": [],
+    "severity": "critical",
+    "confidence": 0.95,
+    "mitre_attack": "T1059.001",
+    "created_at": "2026-01-01",
+    "hit_count": 0
+  },
+  {
+    "rule_id": "PERS-0003",
+    "type": "scheduled_task",
+    "name": "可疑计划任务",
+    "description": "计划任务执行可疑脚本或命令",
+    "pattern": "schtasks.*/create.*(powershell|cmd|wscript|cscript|mshta)",
+    "known_false_positives": [
+      {"condition": "path=Microsoft|Windows|Office|Adobe", "note": "合法软件的计划任务更新"},
+      {"condition": "process=GoogleUpdate|Mozilla|OneDrive", "note": "浏览器/云存储更新任务"}
+    ],
+    "severity": "high",
+    "confidence": 0.85,
+    "mitre_attack": "T1053.005",
+    "created_at": "2026-01-01",
+    "hit_count": 0
+  },
+  {
+    "rule_id": "PERS-0004",
+    "type": "wmi_persistence",
+    "name": "WMI事件订阅持久化",
+    "description": "WMI事件筛选器和命令行消费者绑定",
+    "pattern": "(__EventFilter|CommandLineEventConsumer|__FilterToConsumerBinding)",
+    "known_false_positives": [],
+    "severity": "critical",
+    "confidence": 0.95,
+    "mitre_attack": "T1546.003",
+    "created_at": "2026-01-01",
+    "hit_count": 0
+  },
+  {
+    "rule_id": "PERS-0005",
+    "type": "service_hijack",
+    "name": "服务DLL劫持",
+    "description": "Windows服务加载非标准路径DLL",
+    "pattern": "(rundll32\\.exe.*,|svchost\\.exe.*-k)",
+    "known_false_positives": [],
+    "severity": "high",
+    "confidence": 0.8,
+    "mitre_attack": "T1543.003",
+    "created_at": "2026-01-01",
+    "hit_count": 0
+  },
+  {
+    "rule_id": "PERS-0006",
+    "type": "cron_persistence",
+    "name": "Linux crontab持久化",
+    "description": "crontab执行从网络下载或隐藏目录的脚本",
+    "pattern": "(curl|wget).*\\|.*(bash|sh)|/\\.[^/]+/.*\\.sh",
+    "known_false_positives": [
+      {"condition": "curl&wget&path=/usr/local/", "note": "运维监控脚本定时下载更新"},
+      {"condition": "wget&path=/opt/", "note": "企业软件定时更新脚本"}
+    ],
+    "severity": "high",
+    "confidence": 0.85,
+    "mitre_attack": "T1053.003",
+    "created_at": "2026-01-01",
+    "hit_count": 0
+  },
+  {
+    "rule_id": "PERS-0007",
+    "type": "systemd_persistence",
+    "name": "systemd服务持久化",
+    "description": "用户级systemd服务配置异常",
+    "pattern": "ExecStart=.*/(tmp|dev/shm|var/tmp|\\.|home)",
+    "known_false_positives": [
+      {"condition": "path=/home/.*/\\\\.local/share/", "note": "Flatpak/Snap等用户级合法应用"},
+      {"condition": "ExecStart=/home/.*/\\\\.cargo/|\\\\.npm/|\\\\.pyenv/", "note": "开发者工具链用户级服务"}
+    ],
+    "severity": "high",
+    "confidence": 0.8,
+    "mitre_attack": "T1543.002",
+    "created_at": "2026-01-01",
+    "hit_count": 0
+  },
+  {
+    "rule_id": "PERS-0008",
+    "type": "startup_folder",
+    "name": "启动文件夹异常",
+    "description": "启动文件夹中存在可疑脚本或程序",
+    "pattern": "(Startup|启动).*\\.(bat|cmd|ps1|vbs|exe|dll)",
+    "known_false_positives": [],
+    "severity": "high",
+    "confidence": 0.75,
+    "mitre_attack": "T1547.004",
+    "created_at": "2026-01-01",
+    "hit_count": 0
+  },
+  {
+    "rule_id": "PERS-0009",
+    "type": "rootkit_driver_load",
+    "name": "自编写内核驱动加载",
+    "description": "银狐使用自编写驱动程序（如kabuto.sys）绕过微软黑名单，取得最高权限关闭杀软",
+    "pattern": "kabuto\\.sys|sc\\s+(create|start).*\\.sys|ozldr|drvloader",
+    "indicators": [
+      "非微软签名的合法驱动被加载",
+      "驱动文件使用VMP加壳",
+      "驱动加载后explorer.exe PID被发送给内核驱动",
+      "对抗线程+辅助线程持续关闭杀软进程"
+    ],
+    "known_false_positives": [],
+    "severity": "critical",
+    "confidence": 0.95,
+    "mitre_attack": "T1014",
+    "created_at": "2026-05-09",
+    "hit_count": 0
+  },
+  {
+    "rule_id": "PERS-0010",
+    "type": "explorer_injection",
+    "name": "explorer.exe进程注入",
+    "description": "银狐Rootkit获取explorer.exe PID后注入shellcode，作为持久化和隐蔽执行手段",
+    "pattern": "explorer\\.exe.*OpenProcess|explorer\\.exe.*VirtualAllocEx|explorer\\.exe.*WriteProcessMemory|explorer\\.exe.*CreateRemoteThread",
+    "known_false_positives": [],
+    "severity": "critical",
+    "confidence": 0.9,
+    "mitre_attack": "T1055.001",
+    "created_at": "2026-05-09",
+    "hit_count": 0
+  },
+  {
+    "rule_id": "PERS-0011",
+    "type": "shell_config_hijack",
+    "name": "Shell配置劫持",
+    "description": "~/.bashrc/~/.profile/~/.zshrc被注入恶意命令，常见于Linux持久化后门",
+    "pattern": "(~/\\.(bashrc|profile|zshrc|bash_profile)|/etc/(profile|bash\\.bashrc))",
+    "indicators": [
+      "文件末尾追加curl/wget下载执行",
+      "base64编码命令",
+      "修改PATH指向恶意目录",
+      "alias劫持常用命令(如alias ls='ls -la; /tmp/backdoor')"
+    ],
+    "known_false_positives": [],
+    "severity": "high",
+    "confidence": 0.85,
+    "mitre_attack": "T1546.004",
+    "created_at": "2026-05-13",
+    "hit_count": 0
+  },
+  {
+    "rule_id": "PERS-0012",
+    "type": "user_systemd_service",
+    "name": "用户级systemd服务持久化",
+    "description": "~/.config/systemd/user/下的非标准systemd服务，可实现用户登录后自动启动恶意程序",
+    "pattern": "~/\\.config/systemd/user/.*\\.service",
+    "indicators": [
+      "ExecStart指向/tmp或隐藏目录",
+      "Restart=always",
+      "WantedBy=default.target"
+    ],
+    "known_false_positives": [
+      {"condition": "process=pipewire|pulseaudio|gpg-agent|ssh-agent", "note": "桌面环境合法用户服务"}
+    ],
+    "severity": "high",
+    "confidence": 0.8,
+    "mitre_attack": "T1543.002",
+    "created_at": "2026-05-13",
+    "hit_count": 0
+  },
+  {
+    "rule_id": "PERS-0013",
+    "type": "kernel_module_persist",
+    "name": "内核模块持久化",
+    "description": "/etc/modules-load.d/中加载非标准内核模块，可实现持久化和隐蔽执行",
+    "pattern": "/etc/modules-load\\.d/.*\\.conf",
+    "indicators": [
+      "模块名不在标准内核模块列表中",
+      "模块路径指向用户目录或临时目录",
+      "模块无合法数字签名"
+    ],
+    "known_false_positives": [],
+    "severity": "critical",
+    "confidence": 0.9,
+    "mitre_attack": "T1547.006",
+    "created_at": "2026-05-13",
+    "hit_count": 0
+  },
+  {
+    "rule_id": "PERS-0014",
+    "type": "xdg_autostart",
+    "name": "XDG自启动",
+    "description": "~/.config/autostart/下的.desktop文件实现用户登录后自动启动程序",
+    "pattern": "~/\\.config/autostart/.*\\.desktop",
+    "indicators": [
+      "Exec指向/tmp或隐藏目录",
+      "Hidden=false + X-GNOME-Autostart-enabled=true",
+      ".desktop文件名随机或无意义"
+    ],
+    "known_false_positives": [],
+    "severity": "high",
+    "confidence": 0.75,
+    "mitre_attack": "T1547.004",
+    "created_at": "2026-05-13",
+    "hit_count": 0
+  },
+  {
+    "rule_id": "PERS-0015",
+    "type": "pkg_hook_hijack",
+    "name": "包管理器钩子劫持",
+    "description": "/etc/apt/apt.conf.d/或/etc/yum/pluginconf.d/中的恶意钩子脚本，在软件安装/更新时触发恶意代码",
+    "pattern": "/etc/(apt/apt\\.conf\\.d|yum/pluginconf\\.d|dnf/plugins)",
+    "indicators": [
+      "DPkg::Post-Invoke 执行非标准命令",
+      "APT::Update::Post-Invoke 执行下载脚本",
+      "yum插件中的非标准Python脚本"
+    ],
+    "known_false_positives": [],
+    "severity": "high",
+    "confidence": 0.85,
+    "mitre_attack": "T1574.006",
+    "created_at": "2026-05-13",
+    "hit_count": 0
+  }
+  {
+    "rule_id": "PERS-0016",
+    "type": "registry_hijack",
+    "name": "AppCertDLLs 持久化",
+    "description": "HKLM\...\Session Manager\AppCertDlls 中的恶意 DLL，每个进程加载时自动注入",
+    "pattern": "AppCertDlls",
+    "indicators": ["AppCertDlls 键存在且包含非空值", "DLL 路径指向非系统目录"],
+    "known_false_positives": [{"condition": "key empty or not present", "note": "默认系统不存在此键"}],
+    "severity": "critical", "confidence": 0.85, "mitre_attack": "T1546.009",
+    "created_at": "2026-06-23", "hit_count": 0
+  },
+  {
+    "rule_id": "PERS-0017",
+    "type": "registry_hijack",
+    "name": "AppInit_DLLs 持久化",
+    "description": "HKLM\...\Windows\AppInit_DLLs 中的恶意 DLL，加载 user32.dll 的进程均会加载",
+    "pattern": "AppInit_DLLs",
+    "indicators": ["AppInit_DLLs 值非空且指向非系统目录"],
+    "known_false_positives": [{"condition": "key empty or not present", "note": "默认系统此值为空"}, {"condition": "杀毒软件使用", "note": "安全软件使用 AppInit_DLLs"}],
+    "severity": "critical", "confidence": 0.8, "mitre_attack": "T1546.010",
+    "created_at": "2026-06-23", "hit_count": 0
+  },
+  {
+    "rule_id": "PERS-0018",
+    "type": "shim_hijack",
+    "name": "Application Shim 持久化",
+    "description": "恶意 Shim 数据库，劫持程序 API 调用以实现持久化和绕过安全机制",
+    "pattern": "AppPatch\\sysmain.sdb",
+    "indicators": ["sdbinst.exe 安装了非官方 Shim 数据库"],
+    "known_false_positives": [{"condition": "系统预装官方 shim", "note": "Windows 自带兼容性修复"}],
+    "severity": "high", "confidence": 0.7, "mitre_attack": "T1546.011",
+    "created_at": "2026-06-23", "hit_count": 0
+  },
+  {
+    "rule_id": "PERS-0019",
+    "type": "registry_hijack",
+    "name": "PasswordFilter 密码过滤实径",
+    "description": "HKLM\...\Control\Lsa\Notification Packages 中的恶意 DLL，截获用户明文密码",
+    "pattern": "Notification Packages",
+    "indicators": ["Notification Packages 出现非默认值外的 DLL"],
+    "known_false_positives": [{"condition": "仅包含 RASSFM", "note": "默认值仅为 RASSFM (Microsoft)"}],
+    "severity": "critical", "confidence": 0.9, "mitre_attack": "T1556.006",
+    "created_at": "2026-06-23", "hit_count": 0
+  },
+  {
+    "rule_id": "PERS-0020",
+    "type": "registry_hijack",
+    "name": "NetworkProvider 网络提供商劫持",
+    "description": "HKLM\...\NetworkProvider\Order 中的恶意 DLL，拦截网络登录凭据",
+    "pattern": "NetworkProvider\\Order",
+    "indicators": ["Providers 出现非标准值"],
+    "known_false_positives": [{"condition": "仅包含 RDPNP 和 PnSonyNs", "note": "RDP 和 SONY 网络提供程序"}],
+    "severity": "high", "confidence": 0.85, "mitre_attack": "T1556.006",
+    "created_at": "2026-06-23", "hit_count": 0
+  },
+  {
+    "rule_id": "PERS-0021",
+    "type": "registry_hijack",
+    "name": "Winsock NSP 命名空间提供商劫持",
+    "description": "HKLM\...\WinSock2\Parameters 中的恶意命名空间提供商 DLL，劫持网络通信 API",
+    "pattern": "WinSock2\\Parameters",
+    "indicators": ["NameSpace_Catalog5 包含未知条目", "LibraryPath 指向非系统目录"],
+    "known_false_positives": [{"condition": "仅系统默认 12-14 条目", "note": "正常 WinSock catalog"}],
+    "severity": "high", "confidence": 0.8, "mitre_attack": "T1546.015",
+    "created_at": "2026-06-23", "hit_count": 0
+  },
+  {
+    "rule_id": "PERS-0022",
+    "type": "env_hijack",
+    "name": "PATHEXT 环境变量劫持",
+    "description": "PATHEXT 环境变量被修改，增加恶意扩展名排序在前，导致相同文件名下优先执行恶意文件",
+    "pattern": "PATHEXT",
+    "indicators": ["PATHEXT 中出现非常规扩展名 (.vbs .vbe .js .jse .wsf .ps1)"],
+    "known_false_positives": [],
+    "severity": "medium", "confidence": 0.6, "mitre_attack": "T1574.006",
+    "created_at": "2026-06-23", "hit_count": 0
+  }
+]

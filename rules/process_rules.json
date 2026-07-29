@@ -1,0 +1,246 @@
+[
+  {
+    "rule_id": "PROC-0001",
+    "type": "suspicious_path",
+    "name": "临时目录执行",
+    "description": "进程在/tmp或/var/tmp目录执行",
+    "pattern": "^/(tmp|var/tmp|dev/shm|run)/",
+    "known_false_positives": [
+      {"condition": "process=systemd|sshd|dbus|cups|snap", "note": "系统服务正常临时目录活动"},
+      {"condition": "path=/run/systemd/", "note": "systemd运行时目录，系统进程正常路径"}
+    ],
+    "severity": "high",
+    "confidence": 0.8,
+    "mitre_attack": "T1059.004",
+    "created_at": "2024-01-01",
+    "hit_count": 0
+  },
+  {
+    "rule_id": "PROC-0002",
+    "type": "hidden_directory",
+    "name": "隐藏目录执行",
+    "description": "进程在隐藏目录中执行",
+    "pattern": "/\\.[^/]+/",
+    "known_false_positives": [
+      {"condition": "path=/.git/|/.config/|/.local/|/.cache/|/.ssh/", "note": "开发者/用户正常隐藏配置目录"}
+    ],
+    "severity": "medium",
+    "confidence": 0.6,
+    "mitre_attack": "T1564.001",
+    "created_at": "2024-01-01",
+    "hit_count": 0
+  },
+  {
+    "rule_id": "PROC-0003",
+    "type": "windows_temp",
+    "name": "Windows临时目录执行",
+    "description": "进程在Windows临时目录执行",
+    "pattern": "(Temp|tmp)\\\\.*\\.exe",
+    "known_false_positives": [
+      {"condition": "process=setup|install|update|msiexec|TrustedInstaller", "note": "正常软件安装/更新程序"},
+      {"condition": "process=chrome|firefox|edge|browser", "note": "浏览器更新组件临时执行"}
+    ],
+    "severity": "high",
+    "confidence": 0.85,
+    "mitre_attack": "T1204.002",
+    "created_at": "2024-01-01",
+    "hit_count": 0
+  },
+  {
+    "rule_id": "PROC-0004",
+    "type": "known_malware",
+    "name": "已知恶意进程名",
+    "description": "匹配已知恶意软件进程名（2026年5月更新，含银狐远控）",
+    "pattern": "(xmrig|minerd|kworkerds|ddgs|systemten|sysguard|watchdogs|kdevtmpfsi|kinsing|pwnrig|str2|silverfox|银狐)",
+    "known_false_positives": [],
+    "severity": "critical",
+    "confidence": 0.95,
+    "mitre_attack": "T1498",
+    "created_at": "2024-01-01",
+    "updated_at": "2026-05-09",
+    "hit_count": 0
+  },
+  {
+    "rule_id": "PROC-0005",
+    "type": "living_off_land",
+    "name": "滥用合法工具",
+    "description": "滥用Windows合法工具下载/执行恶意代码",
+    "pattern": "(certutil|bitsadmin|mshta|mavinject|pcalua|rasautou|sdclt|forfiles)\\.exe",
+    "known_false_positives": [
+      {"condition": "certutil&args=-hashfile|-verify|-dump", "note": "certutil用于合法的证书/哈希操作"},
+      {"condition": "bitsadmin&args=/list|/info|/monitor", "note": "bitsadmin仅查看状态，非下载操作"}
+    ],
+    "severity": "high",
+    "confidence": 0.8,
+    "mitre_attack": "T1218",
+    "created_at": "2026-01-01",
+    "hit_count": 0
+  },
+  {
+    "rule_id": "PROC-0006",
+    "type": "suspicious_userdir",
+    "name": "用户目录执行",
+    "description": "可执行文件从用户AppData/Public/ProgramData运行",
+    "pattern": "(AppData|Public|ProgramData)\\\\.*\\.exe",
+    "known_false_positives": [
+      {"condition": "path=Microsoft|WindowsApps|Teams|OneDrive|Discord|Slack|Zoom|Spotify", "note": "AppData内正常应用商店/Teams/OneDrive/Discord等合法应用"},
+      {"condition": "process=Teams|OneDrive|Discord|Slack|Zoom", "note": "AppData安装的合法即时通讯/协作工具"}
+    ],
+    "severity": "high",
+    "confidence": 0.75,
+    "mitre_attack": "T1204.002",
+    "created_at": "2026-01-01",
+    "hit_count": 0
+  },
+  {
+    "rule_id": "PROC-0007",
+    "type": "av_kill_process",
+    "name": "杀软/EDR进程被异常终止",
+    "description": "银狐Rootkit通过内核驱动或TerminateProcess关闭以下杀软进程，如发现这些进程不存在且系统曾有安装痕迹，应高度怀疑",
+    "target_processes": {
+      "360Safe.exe": "360安全卫士",
+      "360tray.exe": "360安全卫士",
+      "ZhuDongFangYu.exe": "360主动防御模块",
+      "360sd.exe": "360杀毒",
+      "360rp.exe": "360杀毒实时防护",
+      "360rps.exe": "360杀毒防护",
+      "360leakfixer.exe": "360防漏",
+      "360sdrun.exe": "360杀毒运行",
+      "360sdupd.exe": "360杀毒更新",
+      "360FileGuard.exe": "360文件守护",
+      "dep360.exe": "360安全卫士",
+      "SafeDog.exe": "安全狗",
+      "SoftMgr.exe": "金山毒霸",
+      "kxes.exe": "金山毒霸",
+      "QMDownload.exe": "腾讯电脑管家",
+      "QHSafeMain.exe": "腾讯电脑管家",
+      "QHSafeTray.exe": "腾讯电脑管家",
+      "QQPCTray.exe": "腾讯电脑管家",
+      "QQPCRTP.exe": "腾讯电脑管家实时防护",
+      "TrojanHunter.exe": "木马猎手",
+      "HipsDaemon.exe": "火绒",
+      "HipsMain.exe": "火绒主程序",
+      "HipsTray.exe": "火绒托盘",
+      "HRUpdate.exe": "火绒更新",
+      "rfw.exe": "瑞星",
+      "Bka.exe": "Bkav",
+      "BLuPro.exe": "Bkav",
+      "BkavService.exe": "Bkav服务",
+      "LeaovoPcManagerService.exe": "联想电脑管家",
+      "LenovoPcManager.exe": "联想电脑管家",
+      "LAVService.exe": "联想杀毒"
+    },
+    "detection_method": "1.检查杀软安装目录是否存在但进程不在 2.检查进程列表中是否有TerminateProcess对杀软的调用 3.检查是否有kabuto.sys驱动文件",
+    "known_false_positives": [],
+    "severity": "critical",
+    "confidence": 0.9,
+    "mitre_attack": "T1562.001",
+    "created_at": "2026-05-09",
+    "hit_count": 0
+  },
+  {
+    "rule_id": "PROC-0008",
+    "type": "xor_decrypted_process",
+    "name": "异或解密进程名",
+    "description": "银狐Rootkit使用11种不同异或函数解密杀软进程名后发送给内核驱动关闭",
+    "pattern": "(XOR|Xor|xor).*0x[0-9a-fA-F]{2}.*(exe|EXE)",
+    "known_false_positives": [],
+    "severity": "high",
+    "confidence": 0.8,
+    "mitre_attack": "T1562.001",
+    "created_at": "2026-05-09",
+    "hit_count": 0
+  },
+  {
+    "rule_id": "PROC-0009",
+    "type": "name_squatting",
+    "name": "进程名仿冒检测",
+    "description": "检测利用字符替换（0→o, l→1）仿冒系统/知名软件的进程名",
+    "pattern": "(?i)(svch0st|scvhost|expl0rer|winlog0n|csrss0|taskmrg|lsasss|svchosts|sp00lsv|lsass0|smss0|win1ogon|winl0g0n)",
+    "known_false_positives": [],
+    "severity": "critical",
+    "confidence": 0.95,
+    "mitre_attack": "T1036.005",
+    "created_at": "2026-05-18",
+    "hit_count": 0
+  },
+  {
+    "rule_id": "PROC-0010",
+    "type": "official_name_deviation",
+    "name": "知名软件进程名偏差检测",
+    "description": "检测与已知官方可执行名称高度相似但不同的进程名变体，如dingtalk64x_SETUO（官方为DingTalk.exe）",
+    "official_names": [
+      "DingTalk", "WeChat", "Weixin", "WXWork", "Chrome", "msedge", "firefox",
+      "svchost", "explorer", "lsass", "winlogon", "csrss", "smss", "taskmgr",
+      "spoolsv", "services", "rundll32", "RuntimeBroker", "SearchIndexer",
+      "sihost", "taskhostw", "ctfmon", "notepad", "winword", "excel",
+      "powerpnt", "outlook", "OneDrive", "Teams", "Code", "wps",
+      "wpscloudsvr", "wpspdf", "vmware-tray", "vmtoolsd",
+      "YunMai", "WeMeet", "Zoom"
+    ],
+    "deviation_threshold": 3,
+    "known_false_positives": [
+      {"condition": "svchost.exe多副本在System32/SysWOW64", "note": "合法"}
+    ],
+    "severity": "high",
+    "confidence": 0.8,
+    "mitre_attack": "T1036.005",
+    "created_at": "2026-05-18",
+    "hit_count": 0
+  },
+  {
+    "rule_id": "PROC-0011",
+    "type": "digital_signature_anomaly",
+    "name": "进程数字签名异常检测",
+    "description": "检测运行中进程的数字签名异常状态：系统目录下签名无效/知名厂商签名不匹配/文件被篡改",
+    "check_items": [
+      {"condition": "系统目录下签名无效", "severity": "critical", "desc": "系统文件可能被恶意替换"},
+      {"condition": "知名厂商进程签名无效", "severity": "high", "desc": "签名无效但声称来自知名厂商"},
+      {"condition": "签名哈希不匹配", "severity": "critical", "desc": "文件已被篡改"}
+    ],
+    "known_false_positives": [
+      {"condition": "开源/免费软件无签名", "note": "如7-Zip等"}
+    ],
+    "severity": "high",
+    "confidence": 0.85,
+    "mitre_attack": "T1036.002",
+    "created_at": "2026-05-18",
+    "hit_count": 0
+  },
+  {
+    "rule_id": "PROC-0012",
+    "type": "parent_process_anomaly",
+    "name": "系统进程父进程异常",
+    "description": "系统关键进程（svchost.exe/rundll32.exe/conhost.exe等）的父进程不是预期的系统进程（services.exe/wininit.exe/csrss.exe等），可能被注入或劫持",
+    "system_processes": ["svchost.exe", "rundll32.exe", "conhost.exe", "dllhost.exe", "sihost.exe", "taskhostw.exe", "spoolsv.exe", "lsass.exe"],
+    "expected_parents": ["services.exe", "wininit.exe", "csrss.exe", "smss.exe", "svchost.exe"],
+    "known_false_positives": [
+      {"condition": "conhost.exe 父进程为 cmd.exe/powershell.exe", "note": "CMD/PS 正常创建 conhost"},
+      {"condition": "rundll32.exe 父进程为 explorer.exe", "note": "Shell 扩展正常加载"}
+    ],
+    "severity": "critical",
+    "confidence": 0.85,
+    "mitre_attack": "T1055.001",
+    "created_at": "2026-05-21",
+    "hit_count": 0
+  },
+  {
+    "rule_id": "PROC-0013",
+    "type": "signature_gap_in_tree",
+    "name": "进程树签名缺失关联",
+    "description": "进程树中父进程无签名但子进程有签名（白加黑模式），或子进程签名与父进程签名链不一致。例如 svchost.exe(无签名父进程) 衍生出微软签名的 powershell.exe 执行恶意命令",
+    "check_patterns": [
+      "无签名父进程 ?→? 有签名子进程",
+      "非微软父进程 ?→? 微软签名子进程执行可疑命令",
+      "无签名进程衍生多个系统进程"
+    ],
+    "known_false_positives": [
+      {"condition": "用户安装软件正常更新流程", "note": "如 Java/Chrome 更新器"}
+    ],
+    "severity": "high",
+    "confidence": 0.8,
+    "mitre_attack": "T1218",
+    "created_at": "2026-05-21",
+    "hit_count": 0
+  }
+]

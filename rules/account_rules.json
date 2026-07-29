@@ -1,0 +1,62 @@
+[
+  {
+    "rule_id": "ACCT-0001",
+    "type": "spoofed_system",
+    "name": "仿冒系统账号",
+    "description": "用户名仿冒系统账号",
+    "pattern": "^(administrator|root|system|guest|admin)\\d+$",
+    "severity": "high",
+    "confidence": 0.85,
+    "mitre_attack": "T1136.001",
+    "created_at": "2024-01-01",
+    "hit_count": 0
+  },
+  {
+    "rule_id": "ACCT-0002",
+    "type": "hidden_account",
+    "name": "隐藏账号",
+    "description": "用户名以点开头或$结尾（隐藏账号）",
+    "pattern": "(^\\.|.*\\$$)",
+    "severity": "critical",
+    "confidence": 0.9,
+    "mitre_attack": "T1136.001",
+    "created_at": "2024-01-01",
+    "hit_count": 0
+  },
+  {
+    "rule_id": "ACCT-0003",
+    "type": "suspicious_name",
+    "name": "可疑命名账号",
+    "description": "账号名包含可疑关键词",
+    "pattern": "(hack|shell|backdoor|test|temp|support_\\d+)",
+    "severity": "medium",
+    "confidence": 0.7,
+    "mitre_attack": "T1136.001",
+    "created_at": "2024-01-01",
+    "hit_count": 0
+  },
+  {
+    "rule_id": "ACCT-0004",
+    "type": "empty_password",
+    "name": "空密码账号",
+    "description": "账号密码为空，极易被利用",
+    "pattern": "^[^:]+::\\d+:",
+    "severity": "critical",
+    "confidence": 0.95,
+    "mitre_attack": "T1078.001",
+    "created_at": "2026-01-01",
+    "hit_count": 0
+  },
+  {
+    "rule_id": "ACCT-0005",
+    "type": "uid_zero",
+    "name": "非root的UID=0账号",
+    "description": "UID=0但用户名非root，可能为提权后门",
+    "pattern": "^[^:]+:[^:]*:0:0:",
+    "severity": "critical",
+    "confidence": 0.9,
+    "mitre_attack": "T1548",
+    "created_at": "2026-01-01",
+    "hit_count": 0
+  }
+]

@@ -1,0 +1,249 @@
+[
+  {
+    "rule_id": "IP-0001",
+    "type": "malicious_port",
+    "name": "已知恶意端口",
+    "description": "连接到已知恶意端口（含银狐C2端口，2026年5月更新）",
+    "ports": [
+      4444,
+      5555,
+      6666,
+      7777,
+      8888,
+      9999,
+      12345,
+      31337,
+      44445,
+      55554,
+      1337,
+      2222,
+      3333,
+      4443,
+      6379,
+      8443,
+      9090,
+      11111,
+      670,
+      8670,
+      5676,
+      58676,
+      8880,
+      5050
+    ],
+    "port_context": {
+      "670/8670": "银狐C2（2025-08~11，552样本）",
+      "5676/58676": "银狐C2（2025-11~2026-01，409样本）",
+      "8880": "银狐C2（2026-03至今，184样本）",
+      "5050": "银狐C2（2026-03）"
+    },
+    "known_false_positives": [
+      {
+        "condition": "process=TopSAP|天融信|topsec",
+        "note": "天融信VPN内部通信，4444端口为VPN隧道"
+      },
+      {
+        "condition": "port=11111&process=WPS|wps|Kingsoft",
+        "note": "WPS Office内部通信端口"
+      },
+      {
+        "condition": "port=6379&service=redis|Redis",
+        "note": "合法Redis服务"
+      },
+      {
+        "condition": "port=8443&service=HTTPS|https",
+        "note": "合法HTTPS备用端口"
+      },
+      {
+        "condition": "port=8888&process=jupyter|notebook",
+        "note": "Jupyter Notebook默认端口"
+      },
+      {
+        "condition": "port=9090&process=prometheus|grafana",
+        "note": "Prometheus/Cockpit监控端口"
+      },
+      {
+        "condition": "port=8080&process=tomcat|jenkins",
+        "note": "合法Web应用端口"
+      }
+    ],
+    "severity": "critical",
+    "confidence": 0.9,
+    "mitre_attack": "T1571",
+    "created_at": "2024-01-01",
+    "updated_at": "2026-05-13",
+    "hit_count": 0
+  },
+  {
+    "rule_id": "IP-0002",
+    "type": "close_wait_flood",
+    "name": "CLOSE_WAIT大量累积",
+    "description": "单IP CLOSE_WAIT连接>10个，可能为后门连接",
+    "pattern": "CLOSE_WAIT",
+    "threshold": 10,
+    "known_false_positives": [],
+    "severity": "high",
+    "confidence": 0.75,
+    "mitre_attack": "T1071.001",
+    "created_at": "2026-01-01",
+    "hit_count": 0
+  },
+  {
+    "rule_id": "IP-0003",
+    "type": "dns_anomaly",
+    "name": "DNS异常查询",
+    "description": "DGA域名或DNS隧道特征",
+    "pattern": "([a-z0-9]{16,}\\.(tk|ml|ga|cf|gq)|[a-f0-9]{32,}\\.|x\\.[a-z]+\\.[a-z]+)",
+    "known_false_positives": [],
+    "severity": "high",
+    "confidence": 0.7,
+    "mitre_attack": "T1048.003",
+    "created_at": "2026-01-01",
+    "hit_count": 0
+  },
+  {
+    "rule_id": "IP-0004",
+    "type": "high_volume_exfil",
+    "name": "大流量外联",
+    "description": "异常大流量外传，可能为数据外泄",
+    "pattern": "ESTABLISHED",
+    "threshold_mb": 100,
+    "known_false_positives": [],
+    "severity": "high",
+    "confidence": 0.65,
+    "mitre_attack": "T1041",
+    "created_at": "2026-01-01",
+    "hit_count": 0
+  },
+  {
+    "rule_id": "IP-0005",
+    "type": "reverse_shell",
+    "name": "反向Shell连接",
+    "description": "目标端口为常见Shell端口且为出站连接",
+    "ports": [
+      4444,
+      5555,
+      6666,
+      12345,
+      31337
+    ],
+    "direction": "outbound",
+    "known_false_positives": [
+      {
+        "condition": "process=TopSAP|天融信|topsec",
+        "note": "天融信VPN内部通信，4444端口为VPN隧道"
+      },
+      {
+        "condition": "port=4444&path=Program Files",
+        "note": "VPN客户端出站连接"
+      }
+    ],
+    "severity": "critical",
+    "confidence": 0.9,
+    "mitre_attack": "T1059",
+    "created_at": "2026-01-01",
+    "hit_count": 0
+  },
+  {
+    "rule_id": "IP-0006",
+    "type": "silver_fox_c2",
+    "name": "银狐C2通信检测",
+    "description": "匹配银狐木马C2端口和已知C2 IP，结合端口变迁时间线辅助样本归类",
+    "ports": [
+      670,
+      8670,
+      5676,
+      58676,
+      8880,
+      5050
+    ],
+    "c2_ips": [
+      "95.40.29.190",
+      "16.163.105.153",
+      "183.90.186.193"
+    ],
+    "c2_domains": [
+      "laosjdhd.cn",
+      "aaavugcuvkjbibihb.cc"
+    ],
+    "phishing_ips": [
+      "121.41.85.112",
+      "206.238.180.95"
+    ],
+    "phishing_domains": [
+      "sckca.top",
+      "z3m4.top",
+      "hldfke.com",
+      "dhgwzs.com"
+    ],
+    "known_false_positives": [],
+    "severity": "critical",
+    "confidence": 0.95,
+    "mitre_attack": "T1071.001",
+    "created_at": "2026-05-09",
+    "hit_count": 0
+  },
+  {
+    "rule_id": "IP-0007",
+    "type": "third_party_mgmt",
+    "name": "第三方运维管理端口/IP段",
+    "description": "检测非标准管理端口暴露和第三方运维IP段异常活动",
+    "patterns": {
+      "management_ports": [
+        5900,
+        5901,
+        3389,
+        22,
+        9090,
+        10000,
+        10001,
+        20000,
+        30000,
+        8080,
+        8443
+      ],
+      "ipmi_ports": [
+        623,
+        664
+      ],
+      "serial_over_lan": [
+        7578
+      ],
+      "nas_ports": [
+        5000,
+        5001,
+        8080,
+        8000,
+        8001,
+        8181
+      ]
+    },
+    "anomaly_conditions": [
+      "第三方运维IP段访问非工作时间",
+      "RDP端口映射到公网",
+      "SSH端口改为非22端口但防火墙全局放行",
+      "IPMI/BMC端口对外暴露",
+      "NAS Web管理面板对外暴露"
+    ],
+    "known_false_positives": [
+      {
+        "condition": "端口5900在局域网内",
+        "note": "合法VNC内部管理"
+      },
+      {
+        "condition": "端口623为IPMI不对外",
+        "note": "合法带外管理"
+      },
+      {
+        "condition": "端口5000为Synology内网",
+        "note": "合法NAS内网管理"
+      }
+    ],
+    "severity": "high",
+    "confidence": 0.7,
+    "mitre_attack": [
+      "T1133",
+      "T1190"
+    ],
+    "created_at": "2026-05-14"
+  }
+]

@@ -1,0 +1,40 @@
+﻿# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# 备份文件
+*.bak
+*.orig
+*.tmp
+
+# 二进制备份（不应进仓库）
+*.exe.bak
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 系统文件
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 测试/数据（大文件）
+*.xlsx
+*.zip
+*.tar.gz
+
+# 配置文件模板（含真实key的config不入库，保留example）
+config/threat_intel.json
+
+# 废弃版本
+assets/IR_Collect_v5*.ps1
+
+# macOS
+.macos_*

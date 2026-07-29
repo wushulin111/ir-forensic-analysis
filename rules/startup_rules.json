@@ -1,0 +1,38 @@
+[
+  {
+    "rule_id": "START-0001",
+    "type": "encoded_command",
+    "name": "编码命令执行",
+    "description": "PowerShell/Base64编码命令",
+    "pattern": "(powershell|cmd).*(-enc|base64|FromBase64String)",
+    "severity": "critical",
+    "confidence": 0.9,
+    "mitre_attack": "T1059.001",
+    "created_at": "2024-01-01",
+    "hit_count": 0
+  },
+  {
+    "rule_id": "START-0002",
+    "type": "rundll32_abuse",
+    "name": "Rundll32滥用",
+    "description": "使用rundll32执行恶意代码",
+    "pattern": "rundll32\\.exe.*,",
+    "severity": "high",
+    "confidence": 0.8,
+    "mitre_attack": "T1218.011",
+    "created_at": "2024-01-01",
+    "hit_count": 0
+  },
+  {
+    "rule_id": "START-0003",
+    "type": "wmi_persistence",
+    "name": "WMI持久化",
+    "description": "WMI事件订阅持久化",
+    "pattern": "(wmic|powershell).*(__EventFilter|CommandLineEventConsumer)",
+    "severity": "high",
+    "confidence": 0.85,
+    "mitre_attack": "T1546.003",
+    "created_at": "2024-01-01",
+    "hit_count": 0
+  }
+]

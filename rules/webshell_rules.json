@@ -1,0 +1,98 @@
+[
+  {
+    "rule_id": "WEB-0001",
+    "type": "eval_function",
+    "name": "PHP eval函数",
+    "description": "使用eval执行代码",
+    "pattern": "eval\\s*\\(",
+    "severity": "high",
+    "confidence": 0.8,
+    "mitre_attack": "T1505.003",
+    "created_at": "2024-01-01",
+    "hit_count": 0
+  },
+  {
+    "rule_id": "WEB-0002",
+    "type": "system_exec",
+    "name": "系统命令执行",
+    "description": "使用system/exec等函数",
+    "pattern": "(system|exec|shell_exec|passthru|proc_open|popen)\\s*\\(",
+    "severity": "high",
+    "confidence": 0.85,
+    "mitre_attack": "T1059",
+    "created_at": "2024-01-01",
+    "hit_count": 0
+  },
+  {
+    "rule_id": "WEB-0003",
+    "type": "base64_decode",
+    "name": "Base64解码",
+    "description": "使用base64_decode解码",
+    "pattern": "base64_decode\\s*\\(",
+    "severity": "medium",
+    "confidence": 0.6,
+    "mitre_attack": "T1027",
+    "created_at": "2024-01-01",
+    "hit_count": 0
+  },
+  {
+    "rule_id": "WEB-0004",
+    "type": "file_operation",
+    "name": "可疑文件操作",
+    "description": "文件上传/写入操作",
+    "pattern": "(file_put_contents|fwrite|move_uploaded_file)\\s*\\(",
+    "severity": "medium",
+    "confidence": 0.65,
+    "mitre_attack": "T1105",
+    "created_at": "2024-01-01",
+    "hit_count": 0
+  },
+  {
+    "rule_id": "WEB-0005",
+    "type": "common_name",
+    "name": "常见Webshell文件名",
+    "description": "文件名匹配常见Webshell",
+    "pattern": "(shell|cmd|exec|hack|backdoor|ice|lanker|b374k|wso|c99|r57|alfa)\\.(php|jsp|asp|aspx)",
+    "severity": "high",
+    "confidence": 0.75,
+    "mitre_attack": "T1505.003",
+    "created_at": "2024-01-01",
+    "hit_count": 0
+  },
+  {
+    "rule_id": "WEB-0006",
+    "type": "one_liner",
+    "name": "一句话木马",
+    "description": "典型一句话木马特征",
+    "pattern": "(\\$_(POST|GET|REQUEST|COOKIE)\\[.*\\]\\s*\\(|assert\\s*\\(\\s*\\$_(POST|GET|REQUEST)|eval\\s*\\(\\s*\\$_(POST|GET|REQUEST))",
+    "severity": "critical",
+    "confidence": 0.95,
+    "mitre_attack": "T1505.003",
+    "created_at": "2026-01-01",
+    "hit_count": 0
+  },
+  {
+    "rule_id": "WEB-0007",
+    "type": "memory_shell",
+    "name": "内存马特征",
+    "description": "Java/PHP内存马不落盘特征",
+    "pattern": "(Application\\.setAttribute|ClassLoader\\.defineClass|Instrumentation\\.redefineClasses|java\\.lang\\.reflect\\.Proxy.*invoke)",
+    "severity": "critical",
+    "confidence": 0.9,
+    "mitre_attack": "T1505.003",
+    "created_at": "2026-01-01",
+    "hit_count": 0
+  },
+  {
+    "rule_id": "WEB-0008",
+    "type": "antivirus_kill",
+    "name": "杀软对抗",
+    "description": "尝试终止杀毒软件进程",
+    "pattern": "(taskkill.*(/f|/F).*(av|360|safe|huorong|kwatch|mcafee|norton|defender)|net\\s+stop\\s+(av|360|safe|huorong|kwatch|mcafee|norton|defender))",
+    "severity": "critical",
+    "confidence": 0.9,
+    "mitre_attack": "T1562.001",
+    "created_at": "2026-01-01",
+    "hit_count": 0
+  }
+]
