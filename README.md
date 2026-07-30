@@ -1,4 +1,4 @@
-﻿# ir-forensic-analysis
+# ir-forensic-analysis
 
 > 应急响应取证分析 Skill — 静态取证包深度分析，覆盖 11 大检测维度，支持 6 源威胁情报关联 + MITRE ATT&CK 映射 + 因果链攻击路径复盘
 
@@ -12,13 +12,53 @@
 - **分析引擎** — SKILL.md 驱动的 LLM 11 维深度分析
 - **Windows 采集脚本** — `IR_Collect_v4.3.ps1`（945 行，管理员运行）
 - **Linux 采集脚本** — `who.sh`（司稽 v8.1，sudo 运行）
-- **macOS 采集脚本** — `mac_collect.sh`
+- **macOS 采集脚本** — `mac_collect.sh`（实验性）
 - **威胁情报模块** — 6 源查询（微步/OTX/URLhaus/VT/CVERC/AbuseIPDB）
 - **检测规则库** — JSON + YARA，含银狐专项 34 条规则 / 5265 恶意域名
 
-## 快速开始
+## 安装与使用
 
-### 1. 采集取证包
+### 方式一：作为 Codex Skill 使用（推荐）
+
+```bash
+# 1. 克隆到 Codex skills 目录
+git clone https://github.com/wushulin111/ir-forensic-analysis.git ~/.codex/skills/ir-forensic-analysis
+
+# 2. 配置威胁情报（可选，不配也能用 OTX/URLhaus 免费源）
+cp ~/.codex/skills/ir-forensic-analysis/config/threat_intel.json.example \
+   ~/.codex/skills/ir-forensic-analysis/config/threat_intel.json
+# 编辑 threat_intel.json 填入你的微步/VT Key
+```
+
+安装完成后，在 Codex 对话中直接上传取证包即可触发分析：
+
+```
+帮我分析这个 IR.zip
+分析一下这个取证包
+看看这台服务器是不是被入侵了
+```
+
+### 方式二：直接上传 SKILL.md（适用于其他 LLM）
+
+下载仓库中的 `SKILL.md` 文件，上传到支持文件引用的 LLM 对话中，再将取证包一并上传分析。
+
+### 方式三：Python 命令行独立运行（不依赖 LLM）
+
+```bash
+pip install -r requirements.txt  # 如果仓库中有 requirements.txt
+
+# 解压取证包
+python scripts/extract_archive.py IR.zip -o ./extracted
+
+# 分析
+python scripts/analyze_forensics.py ./extracted/IR_HOSTNAME_TIMESTAMP/ -r ./rules -o ./report
+```
+
+> Python 脚本为参考实现。方式一和方式二的分析深度和准确度更高。
+
+## 采集取证包
+
+### 1. 生成取证包
 
 ```powershell
 # Windows（管理员 PowerShell）
