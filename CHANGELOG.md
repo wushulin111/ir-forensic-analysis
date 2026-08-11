@@ -1,4 +1,54 @@
 # 变更记录
+## mac_collect.sh v2.1.0 (2026-08-11)
+**macOS 采集脚本优化版**
+### 新增
+- **系统采集增强**：sudoers、at 任务、Keychain 列表、Wi-Fi 已知网络、MDM profiles、模块清单 `manifest.txt`、包哈希旁车 `*.tar.gz.sha256`
+- **浏览器兼容**：Safari 自动适配 `history_item_id` / `history_item` 两种 schema
+### 修复
+- **进程签名验证死代码**：移除 `/proc` 逻辑，改用 `ps` + `lsof` + `codesign`
+- **隐藏用户误报**：排除 `_` 开头系统账号、系统白名单、UID<500；通过 ShadowHashData 第二列计数判断空密码
+- **SUID/SGID 命令**：修正 `find -perm` 语法并排除系统路径
+- **循环变量提前展开**：Cron/Safari/浏览器历史等 `run_sys` 内循环变量改为 eval 时展开，避免路径为空导致采集失效
+- **IPv6 外联提取**：兼容 `[IPv6]:port` 并去除残留方括号
+- **set -e 中断风险**：进程签名查询、IP 提取等失败不再中断采集
+### 变更
+- 哈希链改为只保留关键清单摘要，现场取证以打包 SHA256 为准，避免逐文件哈希拖慢采集
+- `run_sys` 失败时输出 `[STDERR/Failed]` 并写入 manifest，错误可见
+## v5.2.0 (2026-08-11)
+**定向采集增强版 — IR_Collect_v5.2.ps1（v5.1 保持稳定版不变）**
+### 新增
+- **独立脚本 IR_Collect_v5.2.ps1**：以 v5.1 为基座新增 `-Target <名称>` 参数，实现按需定向采集，v5.1 保持稳定版不动
+- **定向采集规则**：新增 `config/targets/*.json` 规则目录，规则文件名与目标名一致（如 `tailscale.json`），支持进程名/服务名/注册表键/搜索根目录/深度/数量上限配置
+- **示例规则**：附带 `config/targets/tailscale.json`，覆盖 Tailscale 进程、服务、注册表、安装目录
+- **通用兜底采集**：未提供规则文件时，按目标关键词自动扫描进程、服务、已安装软件与文件
+- **敏感文件哈希保护**：`*.state/*.key/*.pem/*.pfx/*.conf/*.config/*.json/*.db/*.sqlite*/*.log/*.bak` 仅记录 SHA256/元数据，不复制原始内容；仅 exe/dll/sys/msi/bat/cmd/ps1/vbs/js/jar/py 复制到 `9_extra/<目标名>/files/`
+- **输出目录**：定向采集结果统一写入压缩包 `9_extra/<目标名>/`，含 processes.csv / services.csv / installed.csv / registry_*.txt / files.csv / summary.txt
+### 变更
+- 进度窗口标题、元数据与模块清单版本号更新为 v5.2
+- 主流程第 8.6 阶段调用定向采集，仅当传入 `-Target` 时执行，不影响默认采集流程
+### 文档
+- 补充 `IR_Collect_v5.1.ps1` / `IR_Collect_v5.2.ps1` 选型说明、真实用法与场景对照
+- 修正文档中不存在的 `-Quiet` / `-SkipEventLog` / `-OutputDir` 参数示例
+## v5.1.1 (2026-08-11)
+### 修复
+- **采集完成弹窗误报**：修复完成后弹出“找不到参数‘and’（行998）”的问题。原因为 `Test-Path $ZIP -and ...` 中 `-and` 被 PowerShell 当作 `Test-Path` 的参数名；现改为先 `Get-Item` 判断压缩包存在且非空，再决定是否清理临时目录
+- **v5.0 同步修复**：v5.0 中存在相同的清理判断问题，一并修复
+
+## v5.1.0 (2026-08-11)
+**v4.3 与 v5.0 合并版 — 账号多源检测补齐 + 中文界面**
+### 新增
+- **采集脚本 IR_Collect_v5.1**：以 v5.0 为基础，合并 v4.3 的账号取证增强
+- **WMI 账号枚举**：新增 `wmi_users.csv`，通过 CIM/WMI 枚举 Win32_UserAccount，可绕过 NetUserEnum API hook
+- **ProfileList 注册表用户枚举**：新增 `profilelist_users.csv`，读取 HKLM ProfileList，覆盖所有登录过的用户目录
+- **多源账号交叉比对**：新增 `hidden_account_crosscheck.txt`，对比 net user / WMI / ProfileList 三方数据，标记 "net独有 / WMI独有 / Profile独有" 异常
+- **中文勒索信关键词**：勒索信检测补充 `勒索/解密/赎金` 关键词，覆盖中文勒索团伙
+- **错误弹窗**：顶层异常现在会弹出中文错误框，同时写入 collection.log
+### 变更
+- 克隆账号检测（SAM F 键值）提示信息中文化
+- 进度窗口与全部进度提示保持中文（继承 v5.0 修复）
+- 保留 v5.0 增强：带时间戳日志与自动 Flush、签名缓存含 LastWriteTime、RWX 后台 Job + 60 秒超时、ZipFile 压缩与临时目录安全清理
+- 脚本版本号：v5.0 → v5.1
+
 ## v4.3.0 (2026-07-23)
 **威胁情报深度集成 — OTX/URLhaus + 多源账号检测 + VirusTotal/CVERC/AbuseIPDB 多源查询**
 ### 新增

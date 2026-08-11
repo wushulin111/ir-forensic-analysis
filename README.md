@@ -3,16 +3,16 @@
 > 应急响应取证分析 Skill — 静态取证包深度分析，覆盖 11 大检测维度，支持 6 源威胁情报关联 + MITRE ATT&CK 映射 + 因果链攻击路径复盘
 
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
-[![Version](https://img.shields.io/badge/version-4.3.0-green)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-5.2.0-green)](CHANGELOG.md)
 
 ## 简介
 
 `ir-forensic-analysis` 是一个面向应急响应场景的自动化取证分析工具集，包含：
 
 - **分析引擎** — SKILL.md 驱动的 LLM 11 维深度分析
-- **Windows 采集脚本** — `IR_Collect_v4.3.ps1`（945 行，管理员运行）
+- **Windows 采集脚本** — `IR_Collect_v5.1.ps1`（稳定版，1010 行）/ `IR_Collect_v5.2.ps1`（定向增强版，支持 `-Target` 按需采集），管理员运行
 - **Linux 采集脚本** — `who.sh`（司稽 v8.1，sudo 运行）
-- **macOS 采集脚本** — `mac_collect.sh`（实验性）
+- **macOS 采集脚本** — `mac_collect.sh` v2.1（兼容 10.15+ / Intel+Apple Silicon，覆盖系统、网络、进程、持久化、账号、浏览器、日志、安全配置）
 - **威胁情报模块** — 6 源查询（微步/OTX/URLhaus/VT/CVERC/AbuseIPDB）
 - **检测规则库** — JSON + YARA，含银狐专项 34 条规则 / 5265 恶意域名
 
@@ -60,10 +60,25 @@ python scripts/analyze_forensics.py ./extracted/IR_HOSTNAME_TIMESTAMP/ -r ./rule
 
 ### 1. 生成取证包
 
+先选择 Windows 采集脚本：
+
+| 脚本 | 定位 | 什么情况用 |
+|------|------|-----------|
+| `IR_Collect_v5.1.ps1` | 标准全量采集，9 大阶段 | 常规应急响应、疑似入侵、需要完整主机证据时默认使用 |
+| `IR_Collect_v5.2.ps1` | 全量采集 + `-Target` 定向增强 | 需要针对特定软件/组件补充取证时使用，如 VPN、远控、Tailscale、安全软件等 |
+
 ```powershell
-# Windows（管理员 PowerShell）
-powershell.exe -ExecutionPolicy Bypass -File assets/IR_Collect_v4.3.ps1
+# Windows 标准版（管理员 PowerShell，无附加参数）
+powershell.exe -ExecutionPolicy Bypass -File assets/IR_Collect_v5.1.ps1
+
+# Windows 定向增强版：全量采集 + 针对 Tailscale 定向采集
+powershell.exe -ExecutionPolicy Bypass -File assets/IR_Collect_v5.2.ps1 -Target tailscale
+
+# 无规则文件时按关键词兜底扫描
+powershell.exe -ExecutionPolicy Bypass -File assets/IR_Collect_v5.2.ps1 -Target anyapp
 ```
+
+> `IR_Collect_v5.1.ps1` 只做标准全量采集，不需要额外参数；`IR_Collect_v5.2.ps1` 不传 `-Target` 时等价于 v5.1，传入 `-Target 名称` 时会在全量采集基础上追加目标定向采集。
 
 ```bash
 # Linux（root）
@@ -73,7 +88,7 @@ sudo ./assets/who.sh -q
 sudo ./assets/mac_collect.sh
 ```
 
-采集完成后在 `C:\IR\` 或 `/tmp/ir_evidence/` 下生成 `IR_HOSTNAME_TIMESTAMP.zip`。
+采集完成后，Windows 输出到 `C:\IR\`，macOS 输出到 `/opt/ir_evidence/`，生成 `IR_HOSTNAME_TIMESTAMP` 数据包及 SHA256。
 
 ### 2. 分析取证包
 
@@ -135,11 +150,13 @@ ir-forensic-analysis/
 ├── 使用说明.md                 # 详细文档
 ├── CHANGELOG.md                # 变更记录
 ├── assets/                     # 采集脚本
-│   ├── IR_Collect_v4.3.ps1    # Windows 采集
+│   ├── IR_Collect_v5.1.ps1    # Windows 采集稳定版
+│   ├── IR_Collect_v5.2.ps1    # Windows 定向增强版（-Target 按需采集）
 │   ├── who.sh                  # Linux 采集
 │   └── mac_collect.sh          # macOS 采集
 ├── config/
-│   └── threat_intel.json.example  # 情报配置模板
+│   ├── threat_intel.json.example  # 情报配置模板
+│   └── targets/                    # 定向采集规则（tailscale.json 示例）
 ├── scripts/                    # Python 分析引擎
 │   ├── analyze_forensics.py
 │   ├── extract_archive.py
