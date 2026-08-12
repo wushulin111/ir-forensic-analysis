@@ -1,14 +1,35 @@
 ﻿# ============================================================
-# Windows IR Forensic Collection Script v5.1 (ASCII/UTF-8 BOM)
+# Windows IR Forensic Collection Script v5.3.3 (ASCII/UTF-8 BOM)
 # Collection order: volatility (most volatile -> persistent)
 # Compatible: PowerShell 5.1+
 # ============================================================
+
+param(
+    [string]$Target = "",
+    [switch]$DeepForensic,
+    [switch]$IncludeSensitive,
+    [switch]$SkipFileScan,
+    [switch]$IncludeSystemDirs,
+    [int]$ScanDepth = 5
+)
+
+if ($ScanDepth -lt 1) { $ScanDepth = 1 }
+if ($ScanDepth -gt 8) { $ScanDepth = 8 }
 
 # Detect GUI session (disable progress bar if no UI)
 $hasUI = [Environment]::GetEnvironmentVariable("SESSIONNAME") -ne $null -or [Environment]::OSVersion.Platform -eq 'Win32NT' -and (Get-Process -Name explorer -ErrorAction SilentlyContinue)
 
 $ErrorActionPreference = "Continue"
 Set-StrictMode -Off
+
+# Global fallback: capture fatal errors before the main try block and show line number
+trap {
+    $errLine = $_.InvocationInfo.ScriptLineNumber
+    try { New-Item -ItemType Directory -Force -Path 'C:\IR' -ErrorAction SilentlyContinue | Out-Null } catch {}
+    try { Add-Content 'C:\IR\fatal.log' "ERROR line $errLine : $($_.Exception.Message)" -Encoding UTF8 } catch {}
+    try { [System.Windows.Forms.MessageBox]::Show("错误: $($_.Exception.Message)`n行: $errLine", "IR取证 - 错误", "OK", "Error") | Out-Null } catch {}
+    exit 1
+}
 
 $systemDrive = $env:SystemDrive
 $HOSTNAME = $env:COMPUTERNAME
@@ -61,7 +82,7 @@ function Show-Progress {
     param([string]$T, [int]$P, [string]$S)
     if ($null -eq $global:pf) {
         $global:pf = New-Object System.Windows.Forms.Form
-        $global:pf.Text = "IR Forensic Collector v5.1"
+        $global:pf.Text = "IR 应急取证采集 v5.3.3"
         $global:pf.Size = New-Object System.Drawing.Size(520, 150)
         $global:pf.StartPosition = "CenterScreen"
         $global:pf.FormBorderStyle = "FixedDialog"
@@ -101,6 +122,26 @@ function IR-Run {
         Write-Log "[FAIL] $D - $($_.Exception.Message)"
     }
 }
+function IR-Run-Timed {
+    param([string]$D, [string]$C, [string]$O, [int]$TimeoutSec = 20)
+    try {
+        $job = Start-Job -ScriptBlock { param($cmd) & cmd /c $cmd 2>&1 } -ArgumentList $C -ErrorAction Stop
+        if (Wait-Job $job -Timeout $TimeoutSec) {
+            $r = Receive-Job $job
+            Remove-Job $job
+            if ($r) { $r | Out-File $O -Encoding UTF8 } else { '(empty)' | Out-File $O -Encoding UTF8 }
+            Write-Log "[OK] $D"
+        } else {
+            Stop-Job $job -ErrorAction SilentlyContinue
+            Remove-Job $job -Force -ErrorAction SilentlyContinue
+            "(Timeout after ${TimeoutSec}s)" | Out-File $O -Encoding UTF8
+            Write-Log "[TIMEOUT] $D - killed after ${TimeoutSec}s"
+        }
+    } catch {
+        try { "(Error: $($_.Exception.Message))" | Out-File $O -Encoding UTF8 } catch {}
+        Write-Log "[FAIL] $D - $($_.Exception.Message)"
+    }
+}
 function IR-RegExport {
     param([string]$K, [string]$O)
     try {
@@ -110,6 +151,42 @@ function IR-RegExport {
     } catch {
         "(Access denied or missing)" | Out-File $O -Encoding UTF8
         Write-Log "[REG DENY] $K"
+    }
+}
+
+function Export-IREventLog {
+    param([string]$LogName, [string]$DestDir)
+    $sn = $LogName -replace '[/\\]', '_'
+    $dest = Join-Path $DestDir "$sn.evtx"
+    $failFile = Join-Path $DestDir "$sn.FAILED.txt"
+    try {
+        $size = 0L
+        $li = Get-WinEvent -ListLog $LogName -ErrorAction Stop
+        if ($li) { $size = [long]$li.FileSize }
+        $q = ""
+        if ($size -gt 1GB) { $q = " /q:*[System[TimeCreated[timediff(@SystemTime) <= 604800000]]]" }
+        $out = & cmd /c "wevtutil.exe epl `"$LogName`" `"$dest`"$q" 2>&1
+        if (Test-Path $dest -PathType Leaf) {
+            Write-Log "[OK] Event log: $LogName"
+        } else {
+            ($out | Out-String).Trim() | Out-File $failFile -Encoding UTF8
+            Write-Log "[FAIL] Event log: $LogName - export produced no file"
+        }
+    } catch {
+        "Export failed: $($_.Exception.Message)" | Out-File $failFile -Encoding UTF8
+        Write-Log "[FAIL] Event log: $LogName - $($_.Exception.Message)"
+    }
+}
+
+function Copy-BrowserArtifact {
+    param([string]$Source, [string]$Dest, [string]$Label)
+    try {
+        Copy-Item $Source $Dest -Force -ErrorAction Stop
+        Write-Log "[OK] Browser(deep): $Label"
+        return "[OK] $Label"
+    } catch {
+        Write-Log "[SKIP] Browser(deep): $Label - locked"
+        return "[SKIP] $Label - locked"
     }
 }
 
@@ -322,18 +399,188 @@ public class MemoryScanner {
     Flush-Log
 }
 
+# ---------- Targeted collection (v5.3) ----------
+function Invoke-TargetedCollection {
+    param(
+        [string]$TargetName,
+        [string]$OutRoot,
+        [string]$TargetsDir
+    )
+    $name = ([string]$TargetName).Trim()
+    if (-not $name) { return }
+    $safeName = $name -replace '[^\w\-.]', '_'
+    $extraDir = Join-Path (Join-Path $OutRoot "9_extra") $safeName
+    New-Item -ItemType Directory -Force -Path $extraDir | Out-Null
+    New-Item -ItemType Directory -Force -Path (Join-Path $extraDir "files") | Out-Null
+
+    $rule = $null
+    $ruleFile = ""
+    $candidate = Join-Path $TargetsDir "$name.json"
+    if (-not (Test-Path $candidate) -and $env:TEMP) {
+        $candidate = Join-Path $env:TEMP "$name.json"
+    }
+    if (Test-Path $candidate) {
+        $ruleFile = $candidate
+        try { $rule = Get-Content $ruleFile -Raw -Encoding UTF8 | ConvertFrom-Json }
+        catch { Write-Log "[WARN] 定向规则解析失败: $ruleFile - $($_.Exception.Message)" }
+    } else {
+        Write-Log "[INFO] 未找到规则文件 $name.json，使用通用兜底采集"
+    }
+
+    $keyword = if ($rule -and $rule.keyword) { [string]$rule.keyword } else { $name }
+    $procNames = @(); if ($rule -and $rule.process_names) { $procNames = @($rule.process_names) }
+    $svcNames = @(); if ($rule -and $rule.service_names) { $svcNames = @($rule.service_names) }
+    $regKeys = @(); if ($rule -and $rule.registry_keys) { $regKeys = @($rule.registry_keys) }
+    $searchRoots = @(); if ($rule -and $rule.search_roots) { $searchRoots = @($rule.search_roots) }
+    $depth = 4; if ($rule -and $rule.search_depth) { $depth = [int]$rule.search_depth }
+    $maxFiles = 200; if ($rule -and $rule.max_files) { $maxFiles = [int]$rule.max_files }
+    $hashOnly = @('*.state','*.key','*.pem','*.pfx','*.conf','*.config','*.json','*.db','*.sqlite','*.sqlite3','*.log','*.bak')
+    if ($rule -and $rule.hash_only_paths) { $hashOnly = @($rule.hash_only_paths) }
+    $copyExts = @('.exe','.dll','.sys','.msi','.bat','.cmd','.ps1','.vbs','.js','.jar','.py')
+    if ($rule -and $rule.copy_extensions) { $copyExts = @($rule.copy_extensions) }
+
+    # --- Processes ---
+    $procs = New-Object System.Collections.ArrayList
+    $seenPids = @{}
+    $procTreeAll = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Select-Object ProcessId, Name, CommandLine, ExecutablePath
+    foreach ($p in @($procTreeAll)) {
+        $hit = $false
+        if ($p.Name -like "*$keyword*" -or $p.ExecutablePath -like "*$keyword*" -or $p.CommandLine -like "*$keyword*") { $hit = $true }
+        if (-not $hit) { foreach ($pn in $procNames) { if ($p.Name -like $pn) { $hit = $true; break } } }
+        if ($hit) {
+            [void]$procs.Add($p)
+            $seenPids[[int]$p.ProcessId] = $true
+        }
+    }
+    foreach ($pn in $procNames) {
+        foreach ($p in @(Get-Process -Name $pn -ErrorAction SilentlyContinue)) {
+            if ($seenPids.ContainsKey([int]$p.Id)) { continue }
+            $cmd = try { (Get-CimInstance Win32_Process -Filter "ProcessId=$($p.Id)" -ErrorAction Stop).CommandLine } catch { "" }
+            [void]$procs.Add([PSCustomObject]@{ProcessId=$p.Id; Name=$p.ProcessName; CommandLine=$cmd; ExecutablePath=$p.Path})
+        }
+    }
+    $procRows = @($procs | ForEach-Object {
+        $hash = try { (Get-FileHash $_.ExecutablePath -Algorithm SHA256 -ErrorAction Stop).Hash } catch { "" }
+        [PSCustomObject]@{PID=$_.ProcessId; Name=$_.Name; Path=$_.ExecutablePath; CommandLine=$_.CommandLine; SHA256=$hash}
+    } | Sort-Object PID -Unique)
+    if ($procRows.Count -gt 0) { $procRows | Export-Csv "$extraDir\processes.csv" -NoTypeInformation -Encoding UTF8 }
+    else { "[NONE] 未发现匹配进程" | Out-File "$extraDir\processes.csv" -Encoding UTF8 }
+
+    # --- Services ---
+    $svcRows = New-Object System.Collections.ArrayList
+    foreach ($sn in $svcNames) {
+        foreach ($s in @(Get-Service -Name $sn -ErrorAction SilentlyContinue)) {
+            [void]$svcRows.Add([PSCustomObject]@{Name=$s.Name; DisplayName=$s.DisplayName; Status=$s.Status; StartType=$s.StartType})
+        }
+    }
+    foreach ($s in @(Get-Service -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "*$keyword*" -or $_.DisplayName -like "*$keyword*" })) {
+        $dup = @($svcRows | Where-Object { $_.Name -eq $s.Name }).Count -gt 0
+        if (-not $dup) { [void]$svcRows.Add([PSCustomObject]@{Name=$s.Name; DisplayName=$s.DisplayName; Status=$s.Status; StartType=$s.StartType}) }
+    }
+    if ($svcRows.Count -gt 0) { $svcRows | Export-Csv "$extraDir\services.csv" -NoTypeInformation -Encoding UTF8 }
+    else { "[NONE] 未发现匹配服务" | Out-File "$extraDir\services.csv" -Encoding UTF8 }
+
+    # --- Installed software ---
+    $installed = @()
+    foreach ($regBase in @("HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*","HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*","HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*")) {
+        $installed += @(Get-ItemProperty $regBase -ErrorAction SilentlyContinue | Where-Object {
+            $_.DisplayName -and ($_.DisplayName -like "*$keyword*" -or $_.Publisher -like "*$keyword*")
+        } | Select-Object DisplayName, DisplayVersion, Publisher, InstallDate, InstallLocation)
+    }
+    $installed = @($installed | Sort-Object DisplayName -Unique)
+    if ($installed.Count -gt 0) { $installed | Export-Csv "$extraDir\installed.csv" -NoTypeInformation -Encoding UTF8 }
+    else { "[NONE] 未发现匹配安装软件" | Out-File "$extraDir\installed.csv" -Encoding UTF8 }
+
+    # --- Registry ---
+    $regCount = 0
+    $ri = 0
+    foreach ($k in $regKeys) {
+        $ri++
+        $safeKey = $k -replace '[^\w]', '_'
+        $r = reg.exe query $k /s 2>&1
+        if ($LASTEXITCODE -eq 0 -and $r) {
+            $r | Out-File "$extraDir\registry_${ri}_${safeKey}.txt" -Encoding UTF8
+            $regCount++
+        } else {
+            "(Access denied or missing): $k" | Out-File "$extraDir\registry_${ri}_${safeKey}.txt" -Encoding UTF8
+        }
+    }
+
+    # --- File search ---
+    $roots = @()
+    foreach ($r0 in $searchRoots) {
+        if (-not $r0) { continue }
+        $rp = [Environment]::ExpandEnvironmentVariables($r0)
+        if ($rp -and (Test-Path $rp)) { $roots += $rp }
+    }
+    if ($roots.Count -eq 0) {
+        foreach ($r0 in @($env:ProgramFiles, ${env:ProgramFiles(x86)}, $env:ProgramData, $env:LOCALAPPDATA, $env:APPDATA)) {
+            if ($r0 -and (Test-Path $r0)) { $roots += $r0 }
+        }
+        foreach ($ud in @(Get-UserDirs)) {
+            foreach ($r0 in @($ud.AppDataLocal, $ud.AppDataRoaming)) { if ($r0 -and (Test-Path $r0)) { $roots += $r0 } }
+        }
+    }
+    $roots = @($roots | Select-Object -Unique)
+
+    $fileRows = New-Object System.Collections.ArrayList
+    $copiedCount = 0
+    foreach ($root in $roots) {
+        if ($fileRows.Count -ge $maxFiles) { break }
+        $remaining = $maxFiles - $fileRows.Count
+        $candidates = Get-ChildItem -Path $root -Recurse -File -ErrorAction SilentlyContinue -Depth $depth |
+            Where-Object { $_.FullName -match [regex]::Escape($keyword) } |
+            Select-Object -First $remaining
+        foreach ($f in $candidates) {
+            if ($fileRows.Count -ge $maxFiles) { break }
+            $isHashOnly = $false
+            foreach ($pat in $hashOnly) { if ($f.Name -like $pat -or $f.FullName -like $pat) { $isHashOnly = $true; break } }
+            $hash = try { (Get-FileHash $f.FullName -Algorithm SHA256 -ErrorAction Stop).Hash } catch { "" }
+            [void]$fileRows.Add([PSCustomObject]@{
+                FullName=$f.FullName; Name=$f.Name; Length=$f.Length
+                LastWriteTime=$f.LastWriteTime; CreationTime=$f.CreationTime
+                SHA256=$hash; HashOnly=if($isHashOnly){'Yes'}else{'No'}
+            })
+            if (-not $isHashOnly -and $copyExts -contains $f.Extension.ToLower()) {
+                $destName = ("{0:D4}_{1}" -f ($fileRows.Count - 1), ($f.Name -replace '[^\w.\-]', '_'))
+                $dest = Join-Path (Join-Path $extraDir "files") $destName
+                try { Copy-Item $f.FullName $dest -Force -ErrorAction Stop; $copiedCount++ } catch {}
+            }
+        }
+    }
+    if ($fileRows.Count -gt 0) { $fileRows | Export-Csv "$extraDir\files.csv" -NoTypeInformation -Encoding UTF8 }
+    else { "[NONE] 未发现匹配文件" | Out-File "$extraDir\files.csv" -Encoding UTF8 }
+
+    # --- Summary ---
+    $notCopied = $fileRows.Count - $copiedCount
+    @(
+        "定向采集目标: $name"
+        "规则文件: $(if($ruleFile){$ruleFile}else{'无（通用兜底）'})"
+        "生成时间: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
+        "进程: $($procRows.Count) | 服务: $($svcRows.Count) | 安装软件: $($installed.Count)"
+        "文件: $($fileRows.Count) 个（复制 $copiedCount，仅哈希/元数据 $notCopied）| 注册表键: $($regKeys.Count)（成功 $regCount）"
+        ""
+        "敏感文件默认仅记录 SHA256/元数据，不复制原始内容。"
+    ) | Out-File "$extraDir\summary.txt" -Encoding UTF8
+
+    $m9files = Get-ChildItem $extraDir -Recurse -File -ErrorAction SilentlyContinue
+    Add-ModuleStatus -ModuleId "9" -Name "Targeted: $name" -Status "ok" -Error "" -FileCount @($m9files).Count -TotalBytes ($m9files | Measure-Object -Property Length -Sum).Sum
+    Write-Log "[OK] 定向采集 '$name': 进程 $($procRows.Count), 服务 $($svcRows.Count), 文件 $($fileRows.Count), 复制 $copiedCount"
+}
+
 # ===== Main =====
 try {
-    Show-Progress -T "IR Forensic Collector v5.1" -P 0 -S "正在初始化..."
+    Show-Progress -T "IR 应急取证采集 v5.3.3" -P 0 -S "正在初始化..."
     $fmt = "yyyy-MM-dd HH:mm:ss"
     Write-Log "[=== Collection started $(Get-Date -Format $fmt) ===]"
     Write-Log "Host: $HOSTNAME | PS: $($PSVersionTable.PSVersion)"
+    Write-Log "Mode: DeepForensic=$DeepForensic IncludeSensitive=$IncludeSensitive SkipFileScan=$SkipFileScan IncludeSystemDirs=$IncludeSystemDirs ScanDepth=$ScanDepth"
 
     New-Item -ItemType Directory -Force -Path $BASE | Out-Null
     @("$DIR\1_volatile","$DIR\2_accounts","$DIR\3_persistence",
       "$DIR\3_persistence\com_hijack","$DIR\3_persistence\dll_hijack",
       "$DIR\5_filesystem","$DIR\5_filesystem\ransomware_vss",
-      "$DIR\6_logs","$DIR\7_web","$DIR\browser_artifacts") | ForEach-Object { New-Item -ItemType Directory -Force -Path $_ | Out-Null }
+      "$DIR\6_logs","$DIR\6_logs\extended","$DIR\7_web","$DIR\browser_artifacts","$DIR\0_offline") | ForEach-Object { New-Item -ItemType Directory -Force -Path $_ | Out-Null }
 
     $moduleStatus = [System.Collections.ArrayList]::new()
     function Add-ModuleStatus {
@@ -361,7 +608,7 @@ try {
     IR-Run "hosts" "cmd.exe /c type $env:SystemRoot\System32\drivers\etc\hosts" "$V\hosts.txt"
     IR-Run "net-use" "net.exe use" "$V\net_use.txt"
     IR-Run "net-session" "net.exe session" "$V\net_sessions.txt"
-    IR-Run "net-view" "net.exe view /all" "$V\net_view.txt"
+    IR-Run-Timed "net-view" "net.exe view /all" "$V\net_view.txt" -TimeoutSec 20
     IR-Run "net-share" "net.exe share" "$V\net_share.txt"
     IR-Run "sessions" "qwinsta.exe" "$V\sessions.txt"
 
@@ -398,7 +645,11 @@ try {
             $stTotal++
             $c = if ($sig) { $sig.SignerCertificate } else { $null }
             $tc = if ($sig) { $sig.TimeStamperCertificate } else { $null }
-            $fv = try { (Get-Item $_.Path -ErrorAction SilentlyContinue).VersionInfo.FileVersion } catch { '' }
+            $fv = ''
+            try {
+                $fi = Get-Item -LiteralPath $_.Path -ErrorAction Stop
+                if ($fi -and $fi.VersionInfo) { $fv = [string]$fi.VersionInfo.FileVersion }
+            } catch { $fv = '' }
             $sr += [PSCustomObject]@{
                 PID=$_.Id; ProcessName=$_.ProcessName; FilePath=$_.Path
                 FileVersion=if($fv){$fv}else{''}
@@ -667,27 +918,38 @@ try {
     try { $so = Get-Content "$RV\vss_shadows.txt" -ErrorAction SilentlyContinue; if ($so -match "No items") { "[!] No shadow copies" | Out-File "$RV\vss_alert.txt" -Encoding UTF8 } else { $vssCount=([regex]::Matches($so,"shadow copy ID").Count); "Shadow copies: $vssCount" | Out-File "$RV\vss_alert.txt" -Encoding UTF8 } } catch {}
 
     $ransomExts = @('.phobos','.mallox','.hunters','.beast','.medusalocker','.babyk','.sorry','.lockbit','.lockbit3','.lockbit2','.lbl','.blackcat','.alphv','.abk','.basta','.bstar','.bianlian','.akira','.akr','.clop','.cI0p','.play','.royal','.blacksuit','.exx','.rxx','.8base','.qilin','.medusa','.rhysida','.cuba','.hive','.conti','.revil','.sodin','.sodinokibi','.darkside','.babuk','.maze','.egregor','.nefilim','.avos','.panda','.360','.sky','.sun','.blue','.fox','.locked','.encrypted','.crypted','.cry','.enc','.onion','.LOL!','.devil','.quantum','.black','.zeon','.ako','.makop','.keybtc')
-    $foundExts = @()
     $userDirs = Get-UserDirs
-    foreach ($user in $userDirs) {
-        foreach ($ext in $ransomExts) {
-            $matches = Get-ChildItem -Path $user.Path -Recurse -ErrorAction SilentlyContinue -Depth 5 -Filter "*$ext" -File | Select-Object -First 20
-            if ($matches) { $foundExts += [PSCustomObject]@{User=$user.Name; Ext=$ext; Count=($matches|Measure-Object).Count} }
+    if ($SkipFileScan) {
+        Write-Log "[SKIP] 勒索扩展名/勒索信文件扫描已跳过 (-SkipFileScan)"
+    } else {
+        $foundExts = @()
+        $scanRoots = @($userDirs | ForEach-Object { $_.Path })
+        if ($IncludeSystemDirs) {
+            foreach ($sr0 in @("$env:SystemRoot\Temp", $env:ProgramData, $env:ProgramFiles, ${env:ProgramFiles(x86)})) {
+                if ($sr0 -and (Test-Path $sr0)) { $scanRoots += $sr0 }
+            }
         }
-    }
-    if ($foundExts.Count -gt 0) { $foundExts | Export-Csv "$RV\encrypted_extensions.csv" -NoTypeInformation -Encoding UTF8; Write-Log "[ALERT] Ransomware extensions: $($foundExts.Count) types" }
-
-    $notePatterns = @('*README*.txt','*DECRYPT*.txt','*RECOVER*.txt','*HOW_TO*.txt','*RANSOM*.txt','*ransom*','*decrypt*','*recover*','*勒索*','*解密*','*赎金*')
-    $allNotes = @()
-    foreach ($pat in $notePatterns) {
-        foreach ($user in $userDirs) {
-            $n = Get-ChildItem -Path $user.Path -Recurse -ErrorAction SilentlyContinue -Depth 5 -Filter $pat -File | Where-Object { $_.Length -le 100000 } | Select-Object -First 20
-            if ($n) { $allNotes += $n }
+        $scanRoots = @($scanRoots | Select-Object -Unique)
+        foreach ($root in $scanRoots) {
+            foreach ($ext in $ransomExts) {
+                $matches = Get-ChildItem -Path $root -Recurse -ErrorAction SilentlyContinue -Depth $ScanDepth -Filter "*$ext" -File | Select-Object -First 20
+                if ($matches) { $foundExts += [PSCustomObject]@{Root=$root; Ext=$ext; Count=($matches|Measure-Object).Count} }
+            }
         }
-    }
-    if ($allNotes.Count -gt 0) { $allNotes | Sort-Object LastWriteTime -Descending | Export-Csv "$RV\ransom_notes.csv" -NoTypeInformation -Encoding UTF8; Write-Log "[ALERT] Ransom notes: $($allNotes.Count) files" }
+        if ($foundExts.Count -gt 0) { $foundExts | Export-Csv "$RV\encrypted_extensions.csv" -NoTypeInformation -Encoding UTF8; Write-Log "[ALERT] Ransomware extensions: $($foundExts.Count) types" }
 
-    try { Get-WmiObject Win32_LogicalDisk -Filter "DriveType=3" -ErrorAction SilentlyContinue | ForEach-Object { $rb="$($_.DeviceID)\`$Recycle.Bin"; if (Test-Path $rb) { Get-ChildItem $rb -Force -Recurse -ErrorAction SilentlyContinue | Select-Object FullName, Length, LastWriteTime | Out-File "$RV\recycle_bin.txt" -Encoding UTF8 -Append } } } catch {}
+        $notePatterns = @('*README*.txt','*DECRYPT*.txt','*RECOVER*.txt','*HOW_TO*.txt','*RANSOM*.txt','*ransom*','*decrypt*','*recover*','*勒索*','*解密*','*赎金*')
+        $allNotes = @()
+        foreach ($pat in $notePatterns) {
+            foreach ($root in $scanRoots) {
+                $n = Get-ChildItem -Path $root -Recurse -ErrorAction SilentlyContinue -Depth $ScanDepth -Filter $pat -File | Where-Object { $_.Length -le 100000 } | Select-Object -First 20
+                if ($n) { $allNotes += $n }
+            }
+        }
+        if ($allNotes.Count -gt 0) { $allNotes | Sort-Object LastWriteTime -Descending | Export-Csv "$RV\ransom_notes.csv" -NoTypeInformation -Encoding UTF8; Write-Log "[ALERT] Ransom notes: $($allNotes.Count) files" }
+
+        try { Get-WmiObject Win32_LogicalDisk -Filter "DriveType=3" -ErrorAction SilentlyContinue | ForEach-Object { $rb="$($_.DeviceID)\`$Recycle.Bin"; if (Test-Path $rb) { Get-ChildItem $rb -Force -Recurse -ErrorAction SilentlyContinue | Select-Object FullName, Length, LastWriteTime | Out-File "$RV\recycle_bin.txt" -Encoding UTF8 -Append } } } catch {}
+    }
     Show-Progress -P 48 -S "[4/9] 勒索排查完成"
     Flush-Log
 
@@ -715,43 +977,55 @@ try {
     # ===== 6. Filesystem =====
     Show-Progress -P 58 -S "[6/9] 文件系统..."
     $F = "$DIR\5_filesystem"
-    $tempExes = @()
-    foreach ($user in $userDirs) {
-        $tempExes += Get-ChildItem -Path $user.Path -Recurse -ErrorAction SilentlyContinue -Depth 4 | Where-Object { -not $_.PSIsContainer } | Select-Object FullName, Length, LastWriteTime, CreationTime
-    }
-    $tempExes | Export-Csv "$F\temp_executables.csv" -NoTypeInformation -Encoding UTF8
-
-    $threatCats = @{
-        'Ransomware'    = @('.lockbit','.lockbit3','.lockbit2','.lbl','.blackcat','.alphv','.abk','.basta','.bstar','.bianlian','.akira','.akr','.clop','.cI0p','.play','.royal','.blacksuit','.exx','.rxx','.8base','.qilin','.medusa','.rhysida','.cuba','.hive','.conti','.revil','.sodin','.sodinokibi','.darkside','.babuk','.maze','.egregor','.nefilim','.avos','.panda','.360','.phobos','.mallox','.hunters','.beast','.medusalocker','.babyk','.sorry','.sky','.sun','.blue','.fox','.locked','.encrypted','.crypted','.cry','.enc','.onion','.LOL!','.devil','.quantum','.black','.zeon','.ako','.makop','.keybtc')
-        'Scripts'    = @('.ps1','.psm1','.psd1','.vbs','.vbe','.js','.jse','.wsf','.wsh','.hta','.bat','.cmd')
-        'RAT'    = @('.scr','.pif','.cpl','.com','.msi','.msp')
-        'Macro'  = @('.docm','.xlsm','.pptm','.dotm','.xlam','.sct')
-        'MemoryLoad' = @('.bin','.payload','.shellcode','.data','.mem','.pdb','.config')
-    }
-    $threatResults = @()
-    foreach ($user in $userDirs) {
-        foreach ($cat in $threatCats.Keys) {
-            $exts = $threatCats[$cat]
-            try {
-                $files = Get-ChildItem -Path $user.Path -Recurse -ErrorAction SilentlyContinue -Depth 5 -File | Where-Object {
-                    $ext = $_.Extension.ToLower(); $exts -contains $ext
-                } | Select-Object FullName, Length, LastWriteTime
-                if ($files) {
-                    $threatResults += [PSCustomObject]@{User=$user.Name; Category=$cat; Count=($files|Measure-Object).Count; TotalSizeKB=[math]::Round((($files|Measure-Object Length -Sum).Sum)/1KB,2)}
-                }
-            } catch {}
+    if ($SkipFileScan) {
+        Write-Log "[SKIP] 文件系统深度扫描已跳过 (-SkipFileScan)"
+    } else {
+        $scanRoots = @($userDirs | ForEach-Object { $_.Path })
+        if ($IncludeSystemDirs) {
+            foreach ($sr0 in @("$env:SystemRoot\Temp", $env:ProgramData, $env:ProgramFiles, ${env:ProgramFiles(x86)})) {
+                if ($sr0 -and (Test-Path $sr0)) { $scanRoots += $sr0 }
+            }
         }
-    }
-    if ($threatResults.Count -gt 0) {
-        $threatResults | Sort-Object Count -Descending | Export-Csv "$F\threat_file_categories.csv" -NoTypeInformation -Encoding UTF8
-        Write-Log "[THREAT] Threat file categories: $($threatResults.Count) types, $(($threatResults|Measure-Object Count -Sum).Sum) files"
-    }
+        $scanRoots = @($scanRoots | Select-Object -Unique)
 
-    if (Test-Path "$env:USERPROFILE\Downloads") {
-        Get-ChildItem "$env:USERPROFILE\Downloads" -Recurse -ErrorAction SilentlyContinue -Depth 4 | Where-Object { -not $_.PSIsContainer } | Sort-Object LastWriteTime -Descending | Select-Object FullName, Length, LastWriteTime | Export-Csv "$F\downloads.csv" -NoTypeInformation -Encoding UTF8
-    }
-    if (Test-Path "$env:USERPROFILE\Recent") {
-        Get-ChildItem "$env:USERPROFILE\Recent" -ErrorAction SilentlyContinue | Select-Object Name, Length, LastWriteTime | Export-Csv "$F\recent_files.csv" -NoTypeInformation -Encoding UTF8
+        $tempExes = @()
+        foreach ($root in $scanRoots) {
+            $tempExes += Get-ChildItem -Path $root -Recurse -ErrorAction SilentlyContinue -Depth $ScanDepth | Where-Object { -not $_.PSIsContainer } | Select-Object FullName, Length, LastWriteTime, CreationTime
+        }
+        $tempExes | Export-Csv "$F\temp_executables.csv" -NoTypeInformation -Encoding UTF8
+
+        $threatCats = @{
+            'Ransomware'    = @('.lockbit','.lockbit3','.lockbit2','.lbl','.blackcat','.alphv','.abk','.basta','.bstar','.bianlian','.akira','.akr','.clop','.cI0p','.play','.royal','.blacksuit','.exx','.rxx','.8base','.qilin','.medusa','.rhysida','.cuba','.hive','.conti','.revil','.sodin','.sodinokibi','.darkside','.babuk','.maze','.egregor','.nefilim','.avos','.panda','.360','.phobos','.mallox','.hunters','.beast','.medusalocker','.babyk','.sorry','.sky','.sun','.blue','.fox','.locked','.encrypted','.crypted','.cry','.enc','.onion','.LOL!','.devil','.quantum','.black','.zeon','.ako','.makop','.keybtc')
+            'Scripts'    = @('.ps1','.psm1','.psd1','.vbs','.vbe','.js','.jse','.wsf','.wsh','.hta','.bat','.cmd')
+            'RAT'    = @('.scr','.pif','.cpl','.com','.msi','.msp')
+            'Macro'  = @('.docm','.xlsm','.pptm','.dotm','.xlam','.sct')
+            'MemoryLoad' = @('.bin','.payload','.shellcode','.data','.mem','.pdb','.config')
+        }
+        $threatResults = @()
+        foreach ($root in $scanRoots) {
+            foreach ($cat in $threatCats.Keys) {
+                $exts = $threatCats[$cat]
+                try {
+                    $files = Get-ChildItem -Path $root -Recurse -ErrorAction SilentlyContinue -Depth $ScanDepth -File | Where-Object {
+                        $ext = $_.Extension.ToLower(); $exts -contains $ext
+                    } | Select-Object FullName, Length, LastWriteTime
+                    if ($files) {
+                        $threatResults += [PSCustomObject]@{Root=$root; Category=$cat; Count=($files|Measure-Object).Count; TotalSizeKB=[math]::Round((($files|Measure-Object Length -Sum).Sum)/1KB,2)}
+                    }
+                } catch {}
+            }
+        }
+        if ($threatResults.Count -gt 0) {
+            $threatResults | Sort-Object Count -Descending | Export-Csv "$F\threat_file_categories.csv" -NoTypeInformation -Encoding UTF8
+            Write-Log "[THREAT] Threat file categories: $($threatResults.Count) types, $(($threatResults|Measure-Object Count -Sum).Sum) files"
+        }
+
+        if (Test-Path "$env:USERPROFILE\Downloads") {
+            Get-ChildItem "$env:USERPROFILE\Downloads" -Recurse -ErrorAction SilentlyContinue -Depth $ScanDepth | Where-Object { -not $_.PSIsContainer } | Sort-Object LastWriteTime -Descending | Select-Object FullName, Length, LastWriteTime | Export-Csv "$F\downloads.csv" -NoTypeInformation -Encoding UTF8
+        }
+        if (Test-Path "$env:USERPROFILE\Recent") {
+            Get-ChildItem "$env:USERPROFILE\Recent" -ErrorAction SilentlyContinue | Select-Object Name, Length, LastWriteTime | Export-Csv "$F\recent_files.csv" -NoTypeInformation -Encoding UTF8
+        }
     }
     Show-Progress -P 62 -S "[6/9] 文件系统完成"
     Flush-Log
@@ -762,10 +1036,17 @@ try {
     # ===== 7. Logs =====
     Show-Progress -P 65 -S "[7/9] 事件日志..."
     $L = "$DIR\6_logs"
-    @("Security","System","Application","Microsoft-Windows-PowerShell/Operational","Microsoft-Windows-TerminalServices-LocalSessionManager/Operational") | ForEach-Object { $sn=$_ -replace '[/\\]','_'; wevtutil.exe epl "$_" "$L\$sn.evtx" 2>$null }
+    @("Security","System","Application","Microsoft-Windows-PowerShell/Operational","Microsoft-Windows-TerminalServices-LocalSessionManager/Operational") | ForEach-Object { Export-IREventLog -LogName $_ -DestDir $L }
     try { $rdp=@(); Get-WinEvent -FilterHashtable @{LogName='Microsoft-Windows-TerminalServices-LocalSessionManager/Operational';ID=21,22,23,24} -MaxEvents 200 -ErrorAction SilentlyContinue | ForEach-Object { $rdp+=[PSCustomObject]@{TimeCreated=$_.TimeCreated; Id=$_.Id; Message=$_.Message-replace"`r?`n",' '} }; $rdp|Sort-Object TimeCreated -Descending|Export-Csv "$L\rdp_sessions.txt" -NoTypeInformation -Encoding UTF8 } catch {}
     try { $psb=@(); Get-WinEvent -FilterHashtable @{LogName='Microsoft-Windows-PowerShell/Operational';ID=4104} -MaxEvents 200 -ErrorAction SilentlyContinue | ForEach-Object { $psb+=[PSCustomObject]@{TimeCreated=$_.TimeCreated; Message=$_.Message-replace"`r?`n",''} }; $psb|Sort-Object TimeCreated -Descending|Export-Csv "$L\powershell_scriptblock.txt" -NoTypeInformation -Encoding UTF8 } catch {}
-    try { wevtutil.exe epl "Microsoft-Windows-Sysmon/Operational" "$L\Sysmon_Operational.evtx" 2>$null; if(Test-Path "$L\Sysmon_Operational.evtx"){Write-Log "[OK] Sysmon log collected"}else{Write-Log "[INFO] Sysmon not installed"} } catch { Write-Log "[INFO] Sysmon collection skipped" }
+    if (-not $DeepForensic) {
+        try { wevtutil.exe epl "Microsoft-Windows-Sysmon/Operational" "$L\Sysmon_Operational.evtx" 2>$null; if(Test-Path "$L\Sysmon_Operational.evtx"){Write-Log "[OK] Sysmon log collected"}else{Write-Log "[INFO] Sysmon not installed"} } catch { Write-Log "[INFO] Sysmon collection skipped" }
+    }
+    if ($DeepForensic) {
+        $extLogs = @("Microsoft-Windows-TaskScheduler/Operational","Microsoft-Windows-WMI-Activity/Operational","Microsoft-Windows-AppLocker/EXE and DLL","Microsoft-Windows-AppLocker/MSI and Script","Microsoft-Windows-AppLocker/Packaged app-Deployment","Microsoft-Windows-AppLocker/Packaged app-Execution","Microsoft-Windows-Defender/Operational","Microsoft-Windows-TerminalServices-RemoteConnectionManager/Operational","OpenSSH/Operational","Microsoft-Windows-CodeIntegrity/Operational","Microsoft-Windows-Sysmon/Operational")
+        foreach ($el in $extLogs) { Export-IREventLog -LogName $el -DestDir "$L\extended" }
+        Write-Log "[OK] Extended event logs exported ($($extLogs.Count) channels)"
+    }
     $pflog = "$env:SystemRoot\System32\LogFiles\Firewall\pfirewall.log"; if (Test-Path $pflog) { Copy-Item $pflog "$L\pfirewall.log" -Force; Write-Log "[OK] Firewall log collected" } else { Write-Log "[INFO] Firewall log not enabled" }
     Show-Progress -P 70 -S "[7/9] 日志完成"
     Flush-Log
@@ -792,7 +1073,7 @@ try {
     $sysmonInfo = if (Get-Service Sysmon -ErrorAction SilentlyContinue) { "Sysmon: installed, service status=$((Get-Service Sysmon).Status)" } else { "Sysmon: not installed" }
     $webSvrs = @(); if (Test-Path "$env:SystemRoot\System32\inetsrv\w3wp.exe"){$webSvrs+="IIS"}; if (Get-Command nginx -ErrorAction SilentlyContinue){$webSvrs+="Nginx(PATH)"}; if (Test-Path (Join-Path $env:ProgramFiles "nginx\nginx.exe")){$webSvrs+="Nginx(ProgFiles)"}; if (Get-Command httpd -ErrorAction SilentlyContinue){$webSvrs+="Apache"}
     $lp = netstat.exe -ano | Select-String "LISTENING" | ForEach-Object { if($_ -match "TCP\s+(\S+:\d+)\s+.*LISTENING\s+(\d+)") { $iport=$matches[1]; $p=$matches[2]; try{$pn=(Get-Process -Id $p -ErrorAction SilentlyContinue).ProcessName}catch{$pn="?"}; "$iport ($pn)" } }
-    @("Service version info (IR_Collect v5.1)";"Generated: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')";"============================";$iisVer;$rdpStatus;$sshInfo;$javaInfo;"Web servers: $(if($webSvrs.Count -gt 0){$webSvrs -join ', '}else{'none'})";"============================";"Listening ports:";$lp;"";"Sysmon status:";$sysmonInfo) | Out-File $SV -Encoding UTF8
+    @("Service version info (IR_Collect v5.3.3)";"Generated: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')";"============================";$iisVer;$rdpStatus;$sshInfo;$javaInfo;"Web servers: $(if($webSvrs.Count -gt 0){$webSvrs -join ', '}else{'none'})";"============================";"Listening ports:";$lp;"";"Sysmon status:";$sysmonInfo) | Out-File $SV -Encoding UTF8
     Write-Log "[OK] Service version summary"
     Show-Progress -P 79 -S "[8/9] Web完成"
     $m8files = Get-ChildItem "$W" -File -ErrorAction SilentlyContinue
@@ -847,12 +1128,155 @@ try {
         }
     }
 
+    if ($DeepForensic) {
+        $deepBA = Join-Path $BA "deep"
+        New-Item -ItemType Directory -Force -Path $deepBA | Out-Null
+        foreach ($userDir in $userDirs) {
+            $userName = $userDir.Name
+            foreach ($bp in $browserPaths) {
+                $appData = if ($bp.SubDir -eq "Local") { Join-Path $userDir.FullName "AppData\Local" } else { Join-Path $userDir.FullName "AppData\Roaming" }
+                $basePath = Join-Path $appData $bp.Path
+                if (-not (Test-Path $basePath)) { continue }
+                if ($bp.Name -eq "Firefox") {
+                    $profiles = Get-ChildItem $basePath -Directory -ErrorAction SilentlyContinue
+                    foreach ($prof in $profiles) {
+                        $deepDest = Join-Path $deepBA "${userName}_Firefox_$($prof.Name)"
+                        New-Item -ItemType Directory -Force -Path $deepDest | Out-Null
+                        $ffFiles = @("cookies.sqlite","permissions.sqlite","formhistory.sqlite","logins.json","key4.db")
+                        foreach ($ff in $ffFiles) {
+                            if (-not $IncludeSensitive -and $ff -in @("logins.json","key4.db")) { continue }
+                            $src = Join-Path $prof.FullName $ff
+                            if (Test-Path $src) {
+                                $browserSummary += (Copy-BrowserArtifact -Source $src -Dest (Join-Path $deepDest $ff) -Label "$userName Firefox($($prof.Name)) $ff")
+                            }
+                        }
+                    }
+                } else {
+                    $profiles = Get-ChildItem $basePath -Directory -ErrorAction SilentlyContinue
+                    foreach ($prof in $profiles) {
+                        $deepDest = Join-Path $deepBA "${userName}_$($bp.Name)_$($prof.Name)"
+                        New-Item -ItemType Directory -Force -Path $deepDest | Out-Null
+                        $chromiumFiles = @("Downloads","Bookmarks","Top Sites","Favicons","Login Data","Cookies","Web Data")
+                        foreach ($cf in $chromiumFiles) {
+                            if (-not $IncludeSensitive -and $cf -in @("Login Data","Cookies","Web Data")) { continue }
+                            $src = Join-Path $prof.FullName $cf
+                            if (Test-Path $src) {
+                                $browserSummary += (Copy-BrowserArtifact -Source $src -Dest (Join-Path $deepDest $cf) -Label "$userName $($bp.Name)($($prof.Name)) $cf")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Write-Log "[OK] Browser deep artifacts collected"
+    }
+
     if ($browserSummary.Count -eq 0) { $browserSummary += "[NONE] No browser data found" }
     $browserSummary | Out-File "$BA\browser_summary.txt" -Encoding UTF8
 
     $m85files = Get-ChildItem "$BA" -File -ErrorAction SilentlyContinue
     Add-ModuleStatus -ModuleId "8.5" -Name "Browser Artifacts" -Status "ok" -Error "" -FileCount @($m85files).Count -TotalBytes ($m85files | Measure-Object -Property Length -Sum).Sum
     Write-Log "[OK] Browser artifacts: found $($browserSummary.Count) records"
+
+    # ===== 8.55. Deep forensic artifacts (v5.3, optional) =====
+    if ($DeepForensic) {
+        Show-Progress -P 82 -S "[8.5/9] 深度取证: 离线痕迹..."
+        $O = Join-Path $DIR "0_offline"
+        $hiveDir = Join-Path $O "hives"
+        New-Item -ItemType Directory -Force -Path $hiveDir | Out-Null
+
+        if ($IncludeSensitive) {
+            @(@{Name="SAM";Src="HKLM\SAM";File="SAM"},@{Name="SYSTEM";Src="HKLM\SYSTEM";File="SYSTEM"},@{Name="SECURITY";Src="HKLM\SECURITY";File="SECURITY"},@{Name="SOFTWARE";Src="HKLM\SOFTWARE";File="SOFTWARE"}) | ForEach-Object {
+                $dh = Join-Path $hiveDir "$($_.File).hive"
+                reg.exe save $_.Src $dh /y 2>$null | Out-Null
+                if (Test-Path $dh) { Write-Log "[OK] Hive saved: $($_.File)" }
+                else { "reg save failed (permission or hive in use)" | Out-File "$dh.FAILED.txt" -Encoding UTF8; Write-Log "[FAIL] Hive save: $($_.File)" }
+            }
+        } else {
+            "[SKIP] SAM/SYSTEM/SECURITY/SOFTWARE hive 未采集，需加 -IncludeSensitive" | Out-File (Join-Path $hiveDir "hives_skipped.txt") -Encoding UTF8
+            Write-Log "[INFO] Sensitive hives skipped (add -IncludeSensitive to collect)"
+        }
+
+        $amcache = "$env:SystemRoot\AppCompat\Programs\Amcache.hve"
+        if (Test-Path $amcache) {
+            try { Copy-Item $amcache (Join-Path $O "Amcache.hve") -Force -ErrorAction Stop; Write-Log "[OK] Amcache.hve copied" }
+            catch { "Amcache locked; use esentutl or copy from VSS" | Out-File (Join-Path $O "Amcache.hve.LOCKED.txt") -Encoding UTF8; Write-Log "[SKIP] Amcache.hve locked" }
+        }
+
+        @(
+            @{Name="shimcache"; Key="HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\AppCompatCache"},
+            @{Name="bam"; Key="HKLM\SYSTEM\CurrentControlSet\Services\bam\State\UserSettings"},
+            @{Name="dam"; Key="HKLM\SYSTEM\CurrentControlSet\Services\dam\State\UserSettings"},
+            @{Name="srum_extensions"; Key="HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\SRUM\Extensions"},
+            @{Name="mounted_devices"; Key="HKLM\SYSTEM\MountedDevices"}
+        ) | ForEach-Object { IR-RegExport $_.Key (Join-Path $O "$($_.Name).txt") }
+
+        $hkuKeys = @(
+            "Software\Classes\Local Settings\Software\Microsoft\Windows\Shell\Bags",
+            "Software\Classes\Local Settings\Software\Microsoft\Windows\Shell\BagMRU",
+            "Software\Microsoft\Windows\CurrentVersion\Explorer\UserAssist",
+            "Software\Microsoft\Windows\CurrentVersion\Explorer\RecentDocs"
+        )
+        $hkuSids = Get-ChildItem "Registry::HKEY_USERS" -ErrorAction SilentlyContinue | Where-Object { $_.PSChildName -match '^S-1-5-21-' } | ForEach-Object { $_.PSChildName }
+        foreach ($sid in $hkuSids) {
+            $safeSid = $sid -replace '[^\w\-]', '_'
+            foreach ($kb in $hkuKeys) {
+                $rkPath = "HKEY_USERS\$sid\$kb"
+                if (Test-Path "Registry::$rkPath") {
+                    IR-RegExport $rkPath (Join-Path $O ("shell_" + (Split-Path $kb -Leaf) + "_" + $safeSid + ".txt"))
+                }
+            }
+        }
+
+        foreach ($user in (Get-UserDirs)) {
+            $jd = Join-Path $user.AppDataRoaming "Microsoft\Windows\Recent\AutomaticDestinations"
+            if (Test-Path $jd) {
+                Get-ChildItem $jd -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 200 | ForEach-Object {
+                    Copy-Item $_.FullName (Join-Path $O ("jumplist_{0}_{1}" -f $user.Name, $_.Name)) -Force -ErrorAction SilentlyContinue
+                }
+                Write-Log "[OK] Jump lists: $($user.Name)"
+            }
+        }
+
+        if (Test-Path "$env:SystemRoot\Prefetch") {
+            $pfDest = Join-Path $O "prefetch"
+            New-Item -ItemType Directory -Force -Path $pfDest | Out-Null
+            Get-ChildItem "$env:SystemRoot\Prefetch" -Filter "*.pf" -ErrorAction SilentlyContinue | Copy-Item -Destination $pfDest -Force -ErrorAction SilentlyContinue
+            Write-Log "[OK] Prefetch raw files copied"
+        }
+
+        $sru = "$env:SystemRoot\System32\sru\SRUDB.dat"
+        if (Test-Path $sru) {
+            try { Copy-Item $sru (Join-Path $O "SRUDB.dat") -Force -ErrorAction Stop; Write-Log "[OK] SRUDB.dat copied" }
+            catch { "SRUDB.dat locked; use VSS/volume shadow copy" | Out-File (Join-Path $O "SRUDB.dat.LOCKED.txt") -Encoding UTF8; Write-Log "[SKIP] SRUDB.dat locked" }
+        }
+
+        @(
+            "LSASS 内存转储说明"
+            "本脚本默认不执行 LSASS 转储，避免触发 Defender/EDR 告警并规避凭据泄露风险。"
+            "如需转储，请在现场手动执行以下任一方式（管理员权限）："
+            "  1. procdump64.exe -ma lsass.exe lsass.dmp"
+            "  2. 任务管理器 -> lsass.exe -> 创建转储文件"
+            "转储后请立即设置访问控制并仅在隔离环境分析。"
+        ) | Out-File (Join-Path $O "lsass_dump_instructions.txt") -Encoding UTF8
+
+        $m855files = Get-ChildItem $O -Recurse -File -ErrorAction SilentlyContinue
+        Add-ModuleStatus -ModuleId "8.55" -Name "Deep Forensic" -Status "ok" -Error "" -FileCount @($m855files).Count -TotalBytes ($m855files | Measure-Object -Property Length -Sum).Sum
+        Write-Log "[OK] Deep forensic artifacts: $(@($m855files).Count) files"
+        Flush-Log
+    }
+
+    # ===== 8.6. Targeted collection (v5.3, optional) =====
+    if ($Target) {
+        Show-Progress -P 82 -S "[8.5/9] 定向采集: $Target..."
+        $targetsDir = Join-Path $PSScriptRoot "targets"
+        if (-not (Test-Path $targetsDir)) {
+            $altTargets = Join-Path (Split-Path $PSScriptRoot -Parent) "config\targets"
+            if (Test-Path $altTargets) { $targetsDir = $altTargets }
+        }
+        Invoke-TargetedCollection -TargetName $Target -OutRoot $DIR -TargetsDir $targetsDir
+        Flush-Log
+    }
 
     # ===== 9. Finalize =====
     # TEMP_MEI after comparison
@@ -889,7 +1313,11 @@ Host: $HOSTNAME
 IP(s): $ips
 OS: $os
 Time: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
-Script version: IR_Collect v5.1
+Script version: IR_Collect v5.3.3
+Mode: $(if($DeepForensic){'deep'}else{'quick'})
+ScanDepth: $ScanDepth
+SkipFileScan: $SkipFileScan
+IncludeSensitive: $IncludeSensitive
 File count: $fileCount
 Total size: $rawSize
 Signatures: total $stTotal, valid $stValid, unsigned $stUnsigned
@@ -904,7 +1332,13 @@ Process anomalies: $($ar.Count)
         schema="ir-collection-manifest-v1"
         hostname=$HOSTNAME
         collection_time=(Get-Date -Format "yyyy-MM-ddTHH:mm:ssZ")
-        script_version="5.1"
+        script_version="5.3.3"
+        mode=$(if($DeepForensic){"deep"}else{"quick"})
+        deep_forensic=$([bool]$DeepForensic)
+        include_sensitive=$([bool]$IncludeSensitive)
+        skip_file_scan=$([bool]$SkipFileScan)
+        include_system_dirs=$([bool]$IncludeSystemDirs)
+        scan_depth=$ScanDepth
         total_modules=$moduleStatus.Count
         modules_ok=($moduleStatus | Where-Object {$_.status -eq "ok"}).Count
         modules_partial=($moduleStatus | Where-Object {$_.status -eq "partial"}).Count

@@ -1,4 +1,52 @@
-# 变更记录
+﻿# 变更记录
+## v5.3.3 (2026-08-12)
+**修复“不能对 Null 值表达式调用方法”弹窗与采集卡死**
+### 修复
+- 主脚本增加全局 `trap` 兜底：主流程 try 之外（提权、初始化等阶段）发生致命错误时，也会弹出带具体行号的错误提示，并写入 `C:\IR\fatal.log`，不再只显示一句“不能对 Null 值表达式调用方法”
+- GUI 点击“开始采集”增加整体 try/catch，定向目标输入改为空值安全写法，出错时提示具体行号，避免无行号裸报错
+- 定向采集 `Invoke-TargetedCollection` 的 `$TargetName.Trim()` 改为空值安全写法，避免 `-Target` 传空时触发 Null 方法调用
+- 数字签名采集中对 `VersionInfo` 增加空值判断，避免个别进程文件无法读取版本信息时中断
+- 定向规则查找增加 `%TEMP%` 兜底路径，修复 exe 运行时内嵌 `tailscale.json` 从临时目录解压后找不到规则的问题
+- `net view /all` 改用带 20 秒超时的 `IR-Run-Timed`，避免现场网络枚举长时间挂起导致采集停滞
+- 脚本与 GUI 版本号统一更新为 v5.3.3，同步重新编译 GUI exe
+
+## v5.3.2 (2026-08-12)
+**GUI 启动器排版再优化 - 扩大窗口与行距**
+### 修复
+- GUI 窗口从 860x860 放大到 1000x920，支持更大范围调整，内容区不足时自动滚动
+- 分区、选项、说明之间的间距整体加大，字号和按钮高度同步提升，避免文字视觉拥挤
+- 精简选项说明文案，保留适用场景关键信息，减少一次性堆叠的长文本
+- 重新编译 IR_Collect_v5.3_GUI.exe，内嵌采集脚本与 tailscale 定向规则保持一致
+- 界面版本号更新为 v5.3.2，避免与旧版混淆
+
+## v5.3.1 (2026-08-12)
+**GUI 启动器排版重构 — 解决高分屏下文字挤压**
+### 修复
+- GUI 界面改为自动布局：采集模式、可选采集项、定向采集分区展示，选项与适用范围说明分组对齐，不再使用固定坐标堆叠
+- 窗口加大并支持调整大小，内容区超出时自动滚动；高分屏（125%/150% DPI）下字体和控件随系统缩放，不再相互挤压
+- 修正 Windows PowerShell 5.1 将中文弯引号“ ”当作字符串边界解析、导致界面文字错乱的问题
+- 每个采集项补充清晰的适用场景说明，底部操作按钮固定显示
+### 变更
+- GUI 源码 IR_Collect_GUI_v5.3.ps1 与 IR_Collect_v5.3_GUI.exe 已同步更新，内嵌 v5.3 采集脚本与 tailscale 定向规则不变
+
+## v5.3.0 (2026-08-12)
+**深度取证增强版 — IR_Collect_v5.3.ps1（v5.1/v5.2 保持稳定版不变）**
+### 新增
+- **独立脚本 IR_Collect_v5.3.ps1**：以 v5.2 为基座，默认快速快照行为与 v5.2 一致，新增 `-DeepForensic` 深度取证模式
+- **GUI 图形化启动器 IR_Collect_v5.3_GUI.exe**：双击弹出中文选项界面，可选常规/深度取证、敏感数据、跳过文件扫描、系统目录、扫描深度与定向目标；自动请求管理员权限并调用内嵌 v5.3 脚本
+- **深度取证参数**：`-DeepForensic`（离线痕迹+扩展日志+浏览器深库）、`-IncludeSensitive`（SAM/SYSTEM/SECURITY/SOFTWARE hive 与浏览器凭据库，默认关闭）、`-SkipFileScan`（跳过耗时文件扫描）、`-IncludeSystemDirs`（追加 Windows\Temp/ProgramData/Program Files 扫描）、`-ScanDepth N`（1-8，默认 5）
+- **离线痕迹 `0_offline/`**：Amcache.hve、Shimcache/BAM/DAM/SRUM/MountedDevices 注册表导出、ShellBags/UserAssist/RecentDocs（按用户 SID）、跳转列表、Prefetch 原始文件、SRUDB.dat、LSASS 转储指引（不自动转储）
+- **扩展日志 `6_logs/extended/`**：TaskScheduler、WMI-Activity、AppLocker、Defender、TerminalServices-RemoteConnectionManager、OpenSSH、CodeIntegrity、Sysmon 等通道
+- **浏览器深库 `browser_artifacts/deep/`**：Chrome/Edge/Opera/Brave/360/QQ 等 Downloads/Bookmarks/Top Sites/Favicons，Firefox cookies/permissions/formhistory；`-IncludeSensitive` 时含 Login Data/Cookies/logins.json/key4.db
+- **失败占位文件**：事件日志导出失败写入 `.FAILED.txt` 并在 `collection.log` 记录原因；浏览器数据库复制失败标记 `[SKIP] locked`，避免静默丢失
+### 变更
+- GUI 启动器界面重排：窗口加大，采集模式/可选采集项/定向采集分区展示，并补充每个选项的适用范围说明
+- 完整性校验改为压缩包 SHA256 + `IR_metadata.txt` + `file_manifest.csv` + `collection_manifest.json`，不再逐文件生成旧版哈希链
+- 超过 1GB 的事件日志通道仅导出最近 7 天，避免压缩包过大
+- 进度窗口标题、元数据与模块清单版本号更新为 v5.3
+### 文档
+- SKILL.md 增加 v5.3 深度取证分析指引、完整性校验差异与取证包目录说明
+- 使用说明.md / README.md 增加 v5.3 选型表、参数说明、深度输出目录与版本历史
 ## mac_collect.sh v2.1.0 (2026-08-11)
 **macOS 采集脚本优化版**
 ### 新增
@@ -50,7 +98,7 @@
 - 脚本版本号：v5.0 → v5.1
 
 ## v4.3.0 (2026-07-23)
-**威胁情报深度集成 — OTX/URLhaus + 多源账号检测 + VirusTotal/CVERC/AbuseIPDB 多源查询**
+**威胁情报深度集成 — VirusTotal/CVERC/AbuseIPDB 多源查询 + 文件 Hash 情报关联**
 ### 新增
 - **威胁情报多源扩展**：在原有的微步在线基础上，新增 VirusTotal、CVERC 国家计算机病毒协同分析平台、AbuseIPDB 三个情报源
 - **配置文件更新**：config/threat_intel.json 新增 VT/CVERC/AbuseIPDB 三个源配置（Key 为空时自动跳过，用户自行填写启用）

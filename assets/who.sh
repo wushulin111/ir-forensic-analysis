@@ -1,6 +1,6 @@
 #!/bin/bash
 # ============================================================
-# Linux入侵检测报告工具 - Whoamifuck [司稽]
+# Linux入侵检测报告工具 - Whoamicheck [司稽]
 # Author: Enomothem
 # Time: 2021年2月8日
 # Modified: 2026年5月8日 - 全面重构
@@ -26,8 +26,8 @@ set -o pipefail
 #        | 全局变量 |
 # --------------------------------------
 
-VER="2026.5.8@whoamifuck-version 8.0.0"
-WHOAMIFUCK=$(whoami)
+VER="2026.5.8@whoamicheck-version 8.0.0"
+WHOAMICHECK=$(whoami)
 
 # 默认路径
 CONF_PATH="$HOME/.whok"
@@ -117,7 +117,7 @@ function logo
     printf "${_RED} ██║███╗██║██╔══██║██║   ██║██╔══██║██║╚██╔╝██║██║    ██╔══╝  ██║   ██║██║     ██╔═██╗  ${_R}\n"
     printf "${_RED} ╚███╔███╔╝██║  ██║╚██████╔╝██║  ██║██║ ╚═╝ ██║██║    ██║     ╚██████╔╝╚██████╗██║  ██╗ ${_R}\n"
     printf "${_RED}  ╚══╝╚══╝ ╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═╝╚═╝     ╚═╝╚═╝    ╚═╝ ${r} ╚═════╝  ╚═════╝╚═╝  ╚═╝ ${_R}\n"
-    printf "       Hi ${WHOAMIFUCK}          ${VER}          by \\Eonian Sharp\\ -${_BLUE} Enomothem${_R}\n"
+    printf "       Hi ${WHOAMICHECK}          ${VER}          by \\Eonian Sharp\\ -${_BLUE} Enomothem${_R}\n"
 }
 
 function help_cn
@@ -225,7 +225,7 @@ function fk_baseinfo
 
     printf "  %-18s ${_CYAN}%s${_R}\n" "IP地址" "$IP"
     printf "  %-18s %s\n" "网关" "${GW:-unknown}"
-    printf "  %-18s ${_YELLOW}%s${_R}「 ${_RED}%s${_R} 」\n" "主机名/用户" "$HN" "$WHOAMIFUCK"
+    printf "  %-18s ${_YELLOW}%s${_R}「 ${_RED}%s${_R} 」\n" "主机名/用户" "$HN" "$WHOAMICHECK"
     printf "  %-18s %s\n" "DNS" "${DNS:-unknown}"
     printf "  %-18s %s\n" "内核" "$OS"
     printf "  %-18s ${_BG_YELLOW}%s %s${_R}「 ${_BLUE}%s${_R} 」\n" "系统" "$OSNAME" "$OSNAME_VER" "${VM:-物理机}"
@@ -1387,7 +1387,7 @@ function fk_ir_collect
     # ===== 8. 合并原有输出 =====
     echo -e "${_CYAN}[8/9] 合并原有检测结果...${_R}"
     if [ -d "$OUTPUT" ]; then
-        cp -r "$OUTPUT"/* "$COLLECT_DIR/whoamifuck/" 2>/dev/null
+        cp -r "$OUTPUT"/* "$COLLECT_DIR/whoamicheck/" 2>/dev/null
     fi
 
     echo "[=== 取证收集完成 $(date) ===]" | tee -a "$_IR_LOG"
@@ -1412,7 +1412,7 @@ function fk_irpack
     local ARCHIVE_PATH="$IR_OUTPUT_DIR/$IR_ARCHIVE"
 
     echo "正在创建IR证据目录: $IR_COLLECT_DIR"
-    mkdir -p "$IR_COLLECT_DIR"/{1_volatile,2_accounts,3_persistence,4_backdoor,5_system,6_logs,7_filesystem,whoamifuck}
+    mkdir -p "$IR_COLLECT_DIR"/{1_volatile,2_accounts,3_persistence,4_backdoor,5_system,6_logs,7_filesystem,whoamicheck}
 
     echo -e "${_YELLOW}正在执行全量取证收集（按挥发性排序）...${_R}"
     fk_ir_collect "$IR_COLLECT_DIR"

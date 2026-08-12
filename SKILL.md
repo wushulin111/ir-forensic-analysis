@@ -171,7 +171,7 @@ done
 
 ### 取证包目录结构
 
-详见 `references/DIRECTORY_MAPPING.md`。收到取证包后按该文档识别来源格式并定位文件。
+详见 `references/DIRECTORY_MAPPING.md`。收到取证包后按该文档识别来源格式并定位文件。`IR_Collect_v5.3.ps1 -DeepForensic` 会在常规目录之外追加 `0_offline/`、`6_logs/extended/`、`browser_artifacts/deep/`，目录映射与分析方法见下方“v5.3 深度取证包分析指引”。
 
 ---
 
@@ -183,7 +183,7 @@ done
 |--------|-------------|-----------|----------|
 | P0 | `02_Process/ioc_alerts.txt` **★v4.0** | — | **IOC告警进程**（离线扫描已知恶意进程） |
 | P0 | `04_FileSystem/lolbin_alerts.txt` **★v4.0** | — | **LOLBin 滥用告警**（certutil/mshta/powershell -enc 等） |
-| P0 | `12_Metadata/top_hash.txt` **★v4.0** | — | **证据完整性哈希链**（顶层完整性校验） |
+| P0 | `12_Metadata/top_hash.txt` **★v4.0** / `collection_manifest.json` **★v5.3** | — | **证据完整性校验**（v4.0 哈希链；v5.3 起为压缩包 SHA256 + 采集清单） |
 | P0 | `1_volatile/netstat_anob.txt` | `1_volatile/netstat_ano.txt` + `ss_tlnp.txt` | C2外联/反Shell/银狐端口 |
 | P0 | `1_volatile/process_tree.csv` | `1_volatile/process_tree.txt` | 进程注入/父子异常 |
 | P0 | `1_volatile/process_authenticode.csv` **★** | — | 进程数字签名验证 |
@@ -201,6 +201,24 @@ done
 | P2 | `3_persistence/services_detail.csv` | `7_filesystem/hidden_files.txt` | 非微软驱动/隐藏文件 |
 | P2 | `1_volatile/tasklist.csv` | `3_persistence/bashrc_profile.txt` | 杀软缺失/Shell劫持 |
 | P2 | `vss_shadows.txt` | `3_persistence/modules_load.txt` | 卷影删除/内核模块后门 |
+
+### v5.3 深度取证包分析指引（`IR_Collect_v5.3.ps1 -DeepForensic`）
+
+若取证包包含以下目录，说明现场使用了 v5.3 深度取证模式；缺少这些目录则为 v5.3 快速模式或旧版采集。深度模式在完成快速评估后，继续按以下顺序分析离线痕迹，补充常规快照无法覆盖的程序执行、文件访问、远程登录与浏览器深层痕迹。
+
+| 优先级 | 取证文件 | 分析方法 | 分析价值 |
+|--------|---------|---------|---------|
+| P0 | `0_offline/Amcache.hve` | 用 Eric Zimmerman 工具链 `AmcacheParser.exe` 或 Registry Explorer 读取；locked 时优先从 VSS 副本取 | 程序首次安装/执行时间线、已卸载软件痕迹、恶意载荷落盘证据 |
+| P0 | `0_offline/shimcache.txt` / `bam.txt` / `dam.txt` | 解析 AppCompatCache / BAM / DAM 注册表项，提取程序路径与最后执行时间 | 攻击程序执行时间、覆盖日志清除后的执行痕迹 |
+| P0 | `0_offline/shell_Bags_<SID>.txt`、`UserAssist_<SID>.txt`、`RecentDocs_<SID>.txt` | 按用户 SID 关联，读取 ShellBags/UserAssist/RecentDocs 注册表导出 | 用户文件夹浏览习惯、打开过的文档、攻击者交互行为 |
+| P1 | `0_offline/jumplist_*` | 解析 AutomaticDestinations 跳转列表二进制 | 最近打开文件/程序的快捷痕迹，可与 Prefetch 交叉验证 |
+| P1 | `0_offline/prefetch/*.pf` | 用 PECmd 或手动读取 `.pf` 元数据 | 程序执行次数、最后运行时间、引用 DLL 与文件列表 |
+| P1 | `0_offline/SRUDB.dat` | 用 `SrumDump` 或 ESENT 解析；locked 时提示从 VSS 取 | 网络流量、应用使用、能源数据，辅助网络活动溯源 |
+| P1 | `6_logs/extended/*.evtx` | 优先分析 TaskScheduler、WMI-Activity、AppLocker、Defender、TerminalServices、OpenSSH、CodeIntegrity、Sysmon | 计划任务创建、WMI 持久化、程序执行阻止/放行、远程登录、恶意驱动 |
+| P2 | `browser_artifacts/deep/*` | 解析 Downloads/Bookmarks/Top Sites/Favicons；Firefox 含 cookies/permissions/formhistory；`-IncludeSensitive` 时含 Login Data/Cookies/logins.json/key4.db | 浏览器下载记录、访问痕迹、凭据库，需严格保密并隔离分析 |
+| P2 | `0_offline/hives/*.hive` | 仅当现场使用 `-IncludeSensitive` 时存在；SAM/SYSTEM/SECURITY/SOFTWARE 用 Registry Explorer 离线挂载 | 账号密码哈希、启动配置、安全策略、已安装软件，属高敏数据 |
+
+**完整性校验差异**：v5.3 采集包不再逐文件生成旧版 `hash_chain.txt`，证据完整性以压缩包 SHA256 + `IR_metadata.txt` + `file_manifest.csv` + `collection_manifest.json` 校验；`collection_manifest.json` 的 `errors` 字段列出失败模块，分析时须结合 `.FAILED.txt` / `[SKIP]` 标记判断数据缺失范围。
 
 ---
 
@@ -486,7 +504,9 @@ Hash 查询：微步 → VT → CVERC
 > scripts/threat_intel_lookup.py 可在命令行独立运行测试。
 ### ④ 哈希链完整性验证（v3.4.0 新增）
 
-> **适用场景**：win_collect v4.0 采集的取证包中包含 `12_Metadata/hash_chain.txt` 和 `top_hash.txt`
+> **v5.3+ 采集包**：`IR_Collect_v5.1/5.2/5.3` 不再生成旧版 `hash_chain.txt` / `top_hash.txt`。现场证据完整性以压缩包 SHA256 + `IR_metadata.txt` + `file_manifest.csv` + `collection_manifest.json` 为准：先对 ZIP 执行 `Get-FileHash -Algorithm SHA256` 与现场记录比对，再核对 `collection_manifest.json` 的 `script_version` / `mode` / `errors` 以及 `file_manifest.csv` 的文件数。以下旧版验证步骤仅适用于包含 `hash_chain.txt` / `top_hash.txt` 的 v4.0 取证包。
+
+> **适用场景（旧版）**：win_collect v4.0 采集的取证包中包含 `12_Metadata/hash_chain.txt` 和 `top_hash.txt`
 
 **验证步骤**：
 1. 读取 `top_hash.txt`，获取声明顶层哈希
@@ -736,7 +756,7 @@ Hash 查询：微步 → VT → CVERC
 | Sigma 规则匹配 | ✅ 命中 N 条 / 无命中 | 覆盖 SIGMA_PATTERNS 中的命令行模式 |
 | 威胁情报查询 | ✅ 已查 N 个 IP、N 个 Hash / ⏭ 无 API 密钥 | 微步/VT/AbuseIPDB/CVERC 查询了外联 IP 和文件 Hash |
 | 实体关联图 | ✅ / ⏭ 无关联事件 | 进程←→网络←→文件跨维度关联 |
-| **哈希链完整性** | **✅ / ❌ 不匹配** **★v4.0** | **top_hash.txt vs `hash_chain.txt` 重新计算对比** |
+| **证据完整性** | **✅ / ❌ 不匹配** **★v4.0 / v5.3** | **v4.0：top_hash vs hash_chain；v5.3+：ZIP SHA256 + IR_metadata + file_manifest + collection_manifest** |
 
 ### 数据源覆盖
 
@@ -748,7 +768,7 @@ Hash 查询：微步 → VT → CVERC
 | 网络外联 | netstat_ano.txt / dns_cache.txt / rat_port_connections.txt | N | — |
 | ... | ... | ... | ... |
 
-| **证据完整性** | `12_Metadata/hash_chain.txt` / `top_hash.txt` **★v4.0** | N | —（所有文件 SHA256 已校验） |
+| **证据完整性** | `12_Metadata/hash_chain.txt` / `top_hash.txt` **★v4.0**；`IR_metadata.txt` / `file_manifest.csv` / `collection_manifest.json` **★v5.3** | N | —（压缩包 SHA256 + 采集清单已校验） |
 
 > 覆盖率声明：本报告基于已读取文件 + timeline.jsonl 生成。
 > 标注为"未覆盖"的项因源数据缺失无法分析，不影响已发现结论。
