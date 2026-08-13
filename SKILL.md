@@ -25,14 +25,14 @@ metadata:
 | 5 | Webshell | 一句话木马/大马/内存马/杀软对抗/常见文件名 | T1505, T1059, T1562 |
 | 6 | 内存注入 | RWX区域/反射DLL/进程空心化/Beacon特征/无文件攻击 | T1055, T1620 |
 | 7 | 横向移动 | SMB/RDP/SSH扫描/PsExec/WMI远程/哈希传递/WinRM | T1021, T1047, T1550 |
-| 8 | 高级对抗 | 银狐专项(34条规则/5265域名)+远控对抗：Unhooking致盲EDR/PoolParty注入/自编写驱动/白加黑/多阶段加载 | T1562, T1055, T1014 |
+| 8 | 高级对抗 | 银狐专项(43条规则/1918域名/414IP/45哈希)+远控对抗：Unhooking致盲EDR/PoolParty注入/自编写驱动/白加黑/多阶段加载 | T1562, T1055, T1014 |
 | 9 | **进程名仿冒+签名** | 字符替换仿冒svch0st→svchost/Levenshtein官方名偏差/数字签名验证/哈希篡改 | T1036.005, T1036.002 |
 | 10 | **打包器/载荷** | **PyInstaller/PyArmor/UPX/Enigma检测/TEMP_MEI快照对比/多阶段加载识别(v4.2新增)** | T1027, T1059 |
 | 11 | **供应链/勒索** | **勒索家族分类识别(8族)+ESXi虚拟化勒索+NAS漏洞入侵+第三方运维盲区+Dwell Time评估+因果链攻击路径复盘** | T1486, T1490, T1195, T1133 |
 
 > 第10维「打包器/载荷」为 v4.2 新增，第11维「供应链/勒索」为 v3.0 新增，整合了勒索病毒家族深度检测、ESXi/NAS 专项、供应链入侵排查和因果链攻击路径复盘方法论。
 
-> 第8维「高级对抗」合并了银狐专项(34条规则/5265域名)和远控对抗检测，用 `fox_tag`（银狐家族特征）和 `generic_rat_tag`（通用远控对抗）标签区分归属。
+> 第8维「高级对抗」合并了银狐专项(43条规则/1918域名/414IP/45哈希)和远控对抗检测，用 `fox_tag`（银狐家族特征）和 `generic_rat_tag`（通用远控对抗）标签区分归属。
 
 ---
 
@@ -142,6 +142,7 @@ done
 - **存在**：加载 JSON 规则文件辅助检测，注意规则中的 `known_false_positives` 字段做误报排除
 - **YARA 规则**：参考 `rules/yara_rules/` 中的规则模式，LLM 不执行 YARA 扫描，而是在读取文件内容时根据规则中的特征模式进行文本匹配
 - **IOC库**：`rules/ioc_library.json` 包含银狐C2域名/IP/钓鱼域名/驱动文件名/互斥体/样本HASH等已知IOC
+- **2026情报速览**：`references/SILVER_FOX_2026_INTEL.md` 汇总2026年银狐变种、情报源与最新IOC
 - **规则更新**：分析完成后更新 `rules_updated.json`，按 `rule_id + pattern` 去重
 
 ---
@@ -874,7 +875,7 @@ Hash 查询：微步 → OTX → VT → CVERC → MalwareBazaar → ThreatFox �
 
 ## 银狐攻击链参考（7阶段）
 
-> 完整银狐检测规则见 `rules/silver_fox_rules.json`（20条）和 `references/DETECTION_RULES.md#高级对抗检测规则`
+> 完整银狐检测规则见 `rules/silver_fox_rules.json`（43条）、`references/DETECTION_RULES.md#高级对抗检测规则` 和 `references/SILVER_FOX_2026_INTEL.md`
 
 1. **钓鱼传播** → 仿冒税务/违纪名单/补贴福利/金税四期五期/放假通知下载 MSI/ZIP/CHM
 2. **白加黑/多阶段加载** → 白程序入口篡改→Shellcode→解密DLL→调用 SyncCreate

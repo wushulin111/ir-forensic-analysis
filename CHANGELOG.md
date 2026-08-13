@@ -1,4 +1,14 @@
-﻿# 变更记录
+# 变更记录
+## ir-forensic-analysis v4.5.0 (2026-08-13)
+**银狐 2026 情报更新 - 最新情报源与 IOC**
+### 新增
+- 新增 `references/SILVER_FOX_2026_INTEL.md`：汇总 CVERC/CNCERT/奇安信/Cato/瑞星/Foresiet/ThreatFox/MalwareBazaar 等 2026 年银狐情报源、时间线与更新节奏
+- `silver_fox_rules.json` 从 34 条扩展至 43 条：新增 CVERC 人事钓鱼、CNCERT SEO 仿冒、Zinst 系列、日本 ValleyRAT 三驱动 BYOVD、瑞星 DoH 变种、海外税务钓鱼及 2026 新增域名/IP/哈希库（SFOX-0027~0035）
+- `ioc_library.json` 并入【腾讯文档】开源恶意域名情报库最新域名 1390 个（去重后新增 1352 个），累计域名 1918 个、IP 414 个、哈希 45 个、释放路径 207 个
+- SKILL.md / 使用说明.md / DETECTION_RULES.md 同步更新银狐规则数与 2026 变种速览
+### 注意
+- 腾讯文档情报库为社区共享 OSINT，命中后建议结合微步/奇安信/ThreatFox 等厂商情报交叉验证，避免误报
+
 ## ir-forensic-analysis v4.4.0 (2026-08-13)
 **威胁情报多源扩展 - 全球平台对比分析**
 ### 新增

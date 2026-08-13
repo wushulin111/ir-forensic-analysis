@@ -507,6 +507,28 @@ OpenProcess.*svchost|WriteProcessMemory.*svchost|CreateRemoteThread.*svchost
 | RAT-0002 | 非微软签名驱动加载 | critical | generic_rat_tag | T1014 |
 | RAT-0003 | explorer.exe被注入 | critical | generic_rat_tag | T1055.001 |
 | RAT-0004 | 进程提权后注入svchost | critical | generic_rat_tag | T1055.001 |
+| SFOX-0027 | 2026年5月CVERC新变种（人事主题钓鱼+log.dll+8880） | critical | fox_tag | T1566.002 |
+| SFOX-0028 | 2026年5月CNCERT风险提示（SEO仿冒软件+系统进程注入） | critical | fox_tag | T1189 |
+| SFOX-0029 | UTG-Q-1000 Zinst仿冒系列（ZwTraceEvent hook+hosts篡改） | critical | fox_tag | T1562.002 |
+| SFOX-0030 | 2026年7月Cato分析（三驱动BYOVD+FaCai2024+双恢复） | critical | fox_tag | T1574.002 |
+| SFOX-0031 | 2026年7月瑞星DoH变种（DoH隧道+Telegram窃密） | critical | fox_tag | T1071.004 |
+| SFOX-0032 | 2026年海外税务钓鱼（ValleyRAT+ABCDoor+RustSL） | critical | fox_tag | T1566.001 |
+| SFOX-0033 | 2026新增恶意域名库（CNCERT/CN-SEC/奇安信等） | critical | fox_tag | T1071 |
+| SFOX-0034 | 2026新增C2/IP库 | critical | fox_tag | T1071 |
+| SFOX-0035 | 2026新增样本哈希库 | critical | fox_tag | T1204.002 |
+
+### 2026 新增银狐变种速览
+
+> 详细情报源与 IOC 见 `references/SILVER_FOX_2026_INTEL.md`。
+
+| 变种/活动 | 时间 | 关键指标 | 排查入口 |
+|-----------|------|----------|----------|
+| CVERC 人事主题钓鱼 | 2026-05 | `log.dll`+`installer.exe`，`:8880/getinstall64` | 进程模块、netstat |
+| CNCERT SEO 仿冒投递 | 2026-05 | 仿 Chrome/WPS/Clash/VPN，注入 `ctfmon/sihost/svchost/elevation_service`，C2 443/22 | 进程树、下载记录 |
+| Zinst 系列（UTG-Q-1000） | 2026-06~07 | `zinst.*`/`zinstaller-*`，`TCLService`，hosts 篡改，`ranchserv.jpg` 驱动 | 计划任务、服务、hosts |
+| 日本制造业 ValleyRAT | 2026-07 | `ConvertToPDF.exe`/`PDFDirect.exe` 侧加载 `PDFCORE8.dll`，`BootRepair.sys`/`EnPortv.sys`/`wsftprm.sys`，`FaCai2024`，`HKCU\Console\0` | 驱动服务、注册表、进程模块 |
+| 瑞星 DoH 变种 | 2026-07 | 雷电模拟器伪装，`wjcapture.dll`，`oidng2.duoshit.com`，DoH 223.5.5.5/8.8.8.8，`netcssv` 服务 | DoH 流量、服务、Telegram tdata |
+| 海外税务钓鱼 | 2026-01~07 | `teamspeak_control.dll`，`adreses.vip` 集群，`AppClient` 计划任务，`C:\ProgramData\Tailscale` | 计划任务、隐藏目录、网络外联 |
 
 ### 银狐C2端口变迁时间线
 
