@@ -19,7 +19,7 @@
 | MalwareBazaar (abuse.ch) | Hash | 需要免费 Auth-Key | 默认关闭，配置后启用 |
 | Pulsedive | IP/域名/Hash | 可选（无 Key 限流更严） | 已启用 |
 | URLScan.io | 域名历史扫描 | 可选 | 已启用 |
-| Kaspersky OpenTIP | IP/域名/Hash | 需要 | 默认关闭，配置 Key 后启用 |
+| Kaspersky OpenTIP | IP/域名/Hash | 需要 | 本地已启用，Token 到期由 `kaspersky_token_manager.py` 自动续期；发布版需自行配置 |
 | GreyNoise Community | IP | 需要免费 Key | 默认关闭，配置 Key 后启用 |
 | Hybrid Analysis (Falcon Sandbox) | Hash | 需要免费 Key | 默认关闭，配置 Key 后启用 |
 
@@ -53,7 +53,7 @@
 | ThreatFox | https://threatfox.abuse.ch/ | 有 API，需免费 Auth-Key | 已接入，待配置 |
 | Pulsedive | https://pulsedive.com/ | 有 API，免费 Key | 已接入 |
 | URLScan.io | https://urlscan.io/ | 有 API，免费 Key 可选 | 已接入 |
-| Kaspersky OpenTIP | https://opentip.kaspersky.com/ | 有 API，免费注册 Token | 已接入，待配置 Key |
+| Kaspersky OpenTIP | https://opentip.kaspersky.com/ | 有 API，免费注册 Token | 已接入；本地已配置并支持自动续期 |
 | GreyNoise | https://viz.greynoise.io/ | Community API 免费 Key | 已接入，待配置 Key |
 | Hybrid Analysis | https://www.hybrid-analysis.com/ | 有 API，免费 Key | 已接入，待配置 Key |
 | IBM X-Force Exchange | https://exchange.xforce.ibmcloud.com/ | 有 API，免费 Key | 可扩展 |
@@ -88,6 +88,8 @@
    - `TI_CVERC_API_KEY`
    - `TI_PULSEDIVE_API_KEY`
    - `TI_KASPERSKY_OPENTIP_API_KEY`
+   - `TI_KASPERSKY_ACCOUNT_EMAIL`（自动续期用，可选）
+   - `TI_KASPERSKY_ACCOUNT_PASSWORD`（自动续期用，可选）
    - `TI_GREYNOISE_API_KEY`
    - `TI_HYBRID_ANALYSIS_API_KEY`
    - `TI_URLSCAN_API_KEY`
@@ -96,6 +98,8 @@
 4. 如需调整查询顺序，修改 `ip_query_order`、`domain_query_order`、`hash_query_order`。
 
 环境变量优先级高于配置文件，脚本加载配置时会用环境变量覆盖同名字段。
+
+> 卡巴斯基 Token 最长一年有效期。`scripts/kaspersky_token_manager.py` 会在 Token 剩余 30 天以内时，使用配置中的 `account_email` / `account_password` 自动登录 OpenTIP 并生成新 Token，写回 `config/threat_intel.json`。手动执行：`python scripts/kaspersky_token_manager.py --refresh`。
 
 ## 命令行使用
 

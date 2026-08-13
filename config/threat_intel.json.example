@@ -153,11 +153,14 @@
       "method": "GET",
       "base_url": "https://opentip.kaspersky.com/api/v1",
       "api_key": "YOUR_KASPERSKY_OPENTIP_API_KEY_HERE",
+      "account_email": "YOUR_KASPERSKY_ACCOUNT_EMAIL_HERE",
+      "account_password": "YOUR_KASPERSKY_ACCOUNT_PASSWORD_HERE",
+      "token_expires_at": "2027-01-01",
       "env_key": "TI_KASPERSKY_OPENTIP_API_KEY",
       "key_required": true,
       "result_key": "Kaspersky",
       "ioc_types": ["ip", "domain", "hash"],
-      "note": "卡巴斯基威胁情报门户，需注册API Token"
+      "note": "卡巴斯基威胁情报门户，Token 过期时由 kaspersky_token_manager.py 用账号自动续期"
     },
     {
       "name": "GreyNoise",

@@ -12,8 +12,41 @@
 | `analyze_forensics.py` | 主分析脚本 | `scripts/analyze_forensics.py` |
 | `rule_manager.py` | 规则库管理 | `scripts/rule_manager.py` |
 | `threat_intel_lookup.py` | 多源威胁情报查询 | `scripts/threat_intel_lookup.py` |
+| `kaspersky_token_manager.py` | 卡巴斯基 OpenTIP Token 自动续期 | `scripts/kaspersky_token_manager.py` |
 
 > 威胁情报平台清单、API 配置与新增平台方法见 [THREAT_INTEL_PROVIDERS.md](THREAT_INTEL_PROVIDERS.md)。
+
+---
+
+## kaspersky_token_manager.py - 卡巴斯基 Token 自动续期
+
+### 功能
+
+OpenTIP API Token 最长有效期一年。脚本在 Token 剩余不足 30 天时，自动用配置中的 `account_email` / `account_password` 登录 Kaspersky Account，重新生成 Token 并写回 `config/threat_intel.json`。`threat_intel_lookup.py` 每次查询卡巴斯基前会自动调用，无需手工干预。
+
+### 基本用法
+
+```bash
+# 查看 Token 有效期
+python scripts/kaspersky_token_manager.py --show
+
+# 强制续期（遇到验证码时加 --headful 用可见浏览器）
+python scripts/kaspersky_token_manager.py --refresh
+python scripts/kaspersky_token_manager.py --refresh --headful
+
+# 打印当前可用 Token（内部自动判断是否需要续期）
+python scripts/kaspersky_token_manager.py
+```
+
+### 依赖
+
+- Python 3.9+
+- `playwright` 与 Chromium/Chrome（脚本会自动使用本机 Chrome/Edge）
+
+### 安全提示
+
+- 账号密码只写入本地 `config/threat_intel.json`，GitHub 发布版只保留 `threat_intel.json.example` 占位符。
+- 续期失败时脚本会退回旧 Token 并给出错误信息，不影响其它情报源查询。
 
 ---
 

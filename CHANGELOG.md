@@ -1,4 +1,14 @@
 # 变更记录
+## ir-forensic-analysis v4.5.1 (2026-08-13)
+**卡巴斯基 Token 自动续期 + VT Key 本地配置**
+### 新增
+- 新增 `scripts/kaspersky_token_manager.py`：Token 剩余不足 30 天时自动登录卡巴斯基账号重新生成，写回 `config/threat_intel.json`，查询链路无需手工维护
+- `threat_intel_lookup.py` 查询卡巴斯基前自动调用 Token 管理器；卡巴斯基返回 404 时按“未收录”处理
+- 本地 `config/threat_intel.json` 已配置 VirusTotal Key 与卡巴斯基账号/Token（仅本地，不入 GitHub）
+- 修复两个脚本互相导入时重复包装 stdout 导致 “I/O operation on closed file” 的问题
+### 文档
+- `THREAT_INTEL_PROVIDERS.md` / `SCRIPTS_GUIDE.md` 补充自动续期说明与 `threat_intel.json.example` 占位字段
+
 ## ir-forensic-analysis v4.5.0 (2026-08-13)
 **银狐 2026 情报更新 - 最新情报源与 IOC**
 ### 新增

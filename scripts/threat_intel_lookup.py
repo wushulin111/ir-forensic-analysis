@@ -14,7 +14,11 @@ from typing import List, Dict, Optional
 from pathlib import Path
 
 # [Windows] 编码修复
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+try:
+    sys.stdout.reconfigure(encoding='utf-8')
+    sys.stderr.reconfigure(encoding='utf-8')
+except Exception:
+    pass
 
 
 def load_config() -> dict:
@@ -291,7 +295,12 @@ def query_kaspersky(value: str, api_key: str, ioc_type: str) -> dict:
             headers={"x-api-key": api_key},
             timeout=15
         )
-        data = r.json()
+        if r.status_code == 404:
+            return {"not_found": True, "error": "Kaspersky未收录该IOC"}
+        try:
+            data = r.json()
+        except ValueError:
+            return {"error": f"Kaspersky返回非JSON: HTTP {r.status_code}"}
         if not isinstance(data, dict):
             return {"error": "Kaspersky返回格式异常"}
         if "error" in data:
@@ -310,6 +319,17 @@ def query_kaspersky(value: str, api_key: str, ioc_type: str) -> dict:
         }
     except Exception as e:
         return {"error": f"Kaspersky查询异常: {str(e)}"}
+
+
+def _get_kaspersky_api_key(config: dict, source: dict) -> str:
+    """获取卡巴斯基 Token；临近过期时由 kaspersky_token_manager 自动续期。"""
+    api_key = source.get("api_key", "") or os.environ.get("TI_KASPERSKY_OPENTIP_API_KEY", "")
+    try:
+        sys.path.insert(0, str(Path(__file__).parent))
+        from kaspersky_token_manager import get_valid_token
+        return get_valid_token()
+    except Exception:
+        return api_key
 
 
 def query_threatfox(value: str, api_key: str = "") -> dict:
@@ -633,7 +653,7 @@ def multi_source_query_ip(ip: str, config: dict) -> dict:
             if "error" not in r:
                 results["Pulsedive"] = r
         elif source_name == "Kaspersky OpenTIP":
-            r = query_kaspersky(ip, api_key, "ip")
+            r = query_kaspersky(ip, _get_kaspersky_api_key(config, source), "ip")
             if "error" not in r:
                 results["Kaspersky"] = r
             else:
@@ -679,7 +699,7 @@ def multi_source_query_domain(domain: str, config: dict) -> dict:
             if "error" not in r:
                 results["Pulsedive"] = r
         elif source_name == "Kaspersky OpenTIP":
-            r = query_kaspersky(domain, api_key, "domain")
+            r = query_kaspersky(domain, _get_kaspersky_api_key(config, source), "domain")
             if "error" not in r:
                 results["Kaspersky"] = r
             else:
@@ -730,7 +750,7 @@ def multi_source_query_hash(file_hash: str, config: dict) -> dict:
             if "error" not in r:
                 results["ThreatFox"] = r
         elif source_name == "Kaspersky OpenTIP":
-            r = query_kaspersky(file_hash, api_key, "hash")
+            r = query_kaspersky(file_hash, _get_kaspersky_api_key(config, source), "hash")
             if "error" not in r:
                 results["Kaspersky"] = r
             else:
