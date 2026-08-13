@@ -149,6 +149,50 @@ def query_vt_ip(ip: str, api_key: str) -> dict:
         return {"error": f"VT IP查询异常: {str(e)}"}
 
 
+def query_qianxin_compromise(value: str, api_key: str) -> dict:
+    """奇安信失陷检测情报：IPv4/IPv6/域名/URL，命中后返回攻击团伙/C2/家族等关联信息"""
+    if not api_key:
+        return {"not_configured": True, "error": "奇安信 API Key 未配置"}
+    try:
+        r = requests.get(
+            "https://ti.qianxin.com/api/v2/compromise",
+            params={"apikey": api_key, "param": value},
+            timeout=15
+        )
+        data = r.json()
+        if data.get("status") != 10000:
+            return {"error": f"奇安信返回: {data.get('msg', 'unknown')} (status={data.get('status')})"}
+        records = data.get("data", [])
+        if not isinstance(records, list):
+            return {"not_found": True, "error": "奇安信未收录该IOC"}
+        campaigns = sorted({r.get("campaign", "") for r in records if r.get("campaign")})
+        families = sorted({f for r in records for f in (r.get("malicious_family") or []) if f})
+        return {
+            "source": "奇安信失陷检测",
+            "hit_count": len(records),
+            "campaigns": campaigns[:10],
+            "families": families[:10],
+            "records": [
+                {
+                    "alert_name": r.get("alert_name", ""),
+                    "risk": r.get("risk", ""),
+                    "confidence": r.get("confidence", ""),
+                    "malicious_type": r.get("malicious_type", ""),
+                    "malicious_family": r.get("malicious_family", []),
+                    "campaign": r.get("campaign", ""),
+                    "kill_chain": r.get("kill_chain", ""),
+                    "current_status": r.get("current_status", ""),
+                    "targeted": r.get("targeted", ""),
+                    "ioc": r.get("ioc", []),
+                    "TTP": r.get("TTP", ""),
+                    "update_date": r.get("update_date", "")
+                }
+                for r in records[:10]
+            ]
+        }
+    except Exception as e:
+        return {"error": f"奇安信查询异常: {str(e)}"}
+
 
 def query_otx_ip(ip: str, api_key: str = "") -> dict:
     """AlienVault OTX IP信誉查询"""
@@ -620,6 +664,12 @@ def multi_source_query_ip(ip: str, config: dict) -> dict:
                 results["微步"] = r
             else:
                 results["微步_error"] = r.get("error", "")
+        elif source_name == "奇安信失陷检测情报":
+            r = query_qianxin_compromise(ip, api_key)
+            if "error" not in r:
+                results["奇安信"] = r
+            else:
+                results["奇安信_error"] = r.get("error", "")
         elif source_name == "AlienVault OTX":
             r = query_otx_ip(ip, api_key)
             if "error" not in r:
@@ -682,6 +732,12 @@ def multi_source_query_domain(domain: str, config: dict) -> dict:
                 results["微步"] = r
             else:
                 results["微步_error"] = r.get("error", "")
+        elif source_name == "奇安信失陷检测情报":
+            r = query_qianxin_compromise(domain, api_key)
+            if "error" not in r:
+                results["奇安信"] = r
+            else:
+                results["奇安信_error"] = r.get("error", "")
         elif source_name == "AlienVault OTX":
             r = query_otx_domain(domain, api_key)
             if "error" not in r:
@@ -886,10 +942,11 @@ def format_threat_intel(results: dict, config: dict = None) -> str:
     # IP查询结果
     ip_results = results.get("ips", {})
     if ip_results:
-        md += "### IP情报\n\n| IP | 微步 | OTX | URLhaus | VT | AbuseIPDB | GreyNoise | Pulsedive | Kaspersky | ThreatFox | IPinfo |\n"
-        md += "|------|------|-----|---------|----|----------|-----------|-----------|-----------|-----------|--------|\n"
+        md += "### IP情报\n\n| IP | 微步 | 奇安信 | OTX | URLhaus | VT | AbuseIPDB | GreyNoise | Pulsedive | Kaspersky | ThreatFox | IPinfo |\n"
+        md += "|------|------|--------|-----|---------|----|----------|-----------|-----------|-----------|-----------|-----------|--------|\n"
         for ip, info in ip_results.items():
             tb_sev = _threatbook_level(info.get("微步"))
+            qx_str = _cell(info.get("奇安信"), "campaigns", lambda v, r: f"{r.get('hit_count',0)}hit/{','.join(v[:2]) if v else '无团伙'}")
             vt = info.get("VirusTotal", {})
             vt_cnt = _cell(vt, "malicious_count", lambda v, r: f"{v}/{r.get('total_engines','?')}")
             otx = info.get("OTX", {})
@@ -904,17 +961,18 @@ def format_threat_intel(results: dict, config: dict = None) -> str:
             tf_str = _cell(info.get("ThreatFox"), "malware_str", lambda v, r: f"{r.get('ioc_count',0)}ioc/{v}")
             ipi = info.get("IPinfo", {})
             loc = _cell(ipi, "city", lambda v, r: f"{v},{r.get('country','?')}")
-            md += f"| {ip} | {tb_sev} | {otx_str} | {uh_str} | {vt_cnt} | {ab_score} | {gn_str} | {pd_str} | {kasp_str} | {tf_str} | {loc} |\n"
+            md += f"| {ip} | {tb_sev} | {qx_str} | {otx_str} | {uh_str} | {vt_cnt} | {ab_score} | {gn_str} | {pd_str} | {kasp_str} | {tf_str} | {loc} |\n"
     else:
         md += "未发现需要查询的IP\n\n"
 
     # 域名查询结果
     domain_results = results.get("domains", {})
     if domain_results:
-        md += "\n### 域名情报\n\n| 域名 | 微步 | OTX | URLhaus | URLScan | Pulsedive | Kaspersky | ThreatFox |\n"
-        md += "|------|------|-----|---------|---------|-----------|-----------|-----------|\n"
+        md += "\n### 域名情报\n\n| 域名 | 微步 | 奇安信 | OTX | URLhaus | URLScan | Pulsedive | Kaspersky | ThreatFox |\n"
+        md += "|------|------|--------|-----|---------|---------|-----------|-----------|-----------|\n"
         for domain, info in domain_results.items():
             tb_sev = _threatbook_level(info.get("微步"))
+            qx_str = _cell(info.get("奇安信"), "campaigns", lambda v, r: f"{r.get('hit_count',0)}hit/{','.join(v[:2]) if v else '无团伙'}")
             otx = info.get("OTX", {})
             otx_str = _cell(otx, "malware_str", lambda v, r: f"P{r.get('pulse_count',0)}/{v}")
             uh = info.get("URLhaus", {})
@@ -924,7 +982,7 @@ def format_threat_intel(results: dict, config: dict = None) -> str:
             pd_str = _cell(info.get("Pulsedive"), "risk", lambda v, r: f"{v}/{r.get('threat_str','-')}")
             kasp_str = _cell(info.get("Kaspersky"), "zone", lambda v, r: f"{v}/{r.get('threat_score','-')}")
             tf_str = _cell(info.get("ThreatFox"), "malware_str", lambda v, r: f"{r.get('ioc_count',0)}ioc/{v}")
-            md += f"| `{domain}` | {tb_sev} | {otx_str} | {uh_str} | {us_str} | {pd_str} | {kasp_str} | {tf_str} |\n"
+            md += f"| `{domain}` | {tb_sev} | {qx_str} | {otx_str} | {uh_str} | {us_str} | {pd_str} | {kasp_str} | {tf_str} |\n"
 
     # Hash查询结果
     hash_results = results.get("hashes", {})

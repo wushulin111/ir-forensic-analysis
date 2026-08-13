@@ -42,6 +42,19 @@
       "note": "恶意URL分发追踪平台，查询某IP/域名历史上分发过哪些恶意样本"
     },
     {
+      "name": "奇安信失陷检测情报",
+      "enabled": false,
+      "type": "api",
+      "method": "GET",
+      "base_url": "https://ti.qianxin.com/api/v2/compromise",
+      "api_key": "YOUR_QIANXIN_API_KEY_HERE",
+      "env_key": "TI_QIANXIN_API_KEY",
+      "key_required": true,
+      "result_key": "奇安信",
+      "ioc_types": ["ip", "domain"],
+      "note": "失陷检测Restful API，查询IP/域名/URL命中APT/僵尸网络/C2/勒索等；Key 在用户中心-我的API获取"
+    },
+    {
       "name": "VirusTotal",
       "enabled": true,
       "type": "api",
@@ -190,8 +203,8 @@
     }
   ],
   "query_order": ["微步在线X情报社区", "AlienVault OTX", "URLhaus", "VirusTotal", "AbuseIPDB", "CVERC国家计算机病毒协同分析平台", "ThreatFox", "MalwareBazaar", "Pulsedive", "URLScan.io", "Kaspersky OpenTIP", "GreyNoise", "Hybrid Analysis"],
-  "ip_query_order": ["微步在线X情报社区", "AlienVault OTX", "URLhaus", "VirusTotal", "AbuseIPDB", "GreyNoise", "Pulsedive", "Kaspersky OpenTIP", "ThreatFox"],
-  "domain_query_order": ["微步在线X情报社区", "AlienVault OTX", "URLhaus", "URLScan.io", "Pulsedive", "Kaspersky OpenTIP", "ThreatFox"],
+  "ip_query_order": ["微步在线X情报社区", "奇安信失陷检测情报", "AlienVault OTX", "URLhaus", "VirusTotal", "AbuseIPDB", "GreyNoise", "Pulsedive", "Kaspersky OpenTIP", "ThreatFox"],
+  "domain_query_order": ["微步在线X情报社区", "奇安信失陷检测情报", "AlienVault OTX", "URLhaus", "URLScan.io", "Pulsedive", "Kaspersky OpenTIP", "ThreatFox"],
   "hash_query_order": ["微步在线X情报社区", "AlienVault OTX", "VirusTotal", "CVERC国家计算机病毒协同分析平台", "MalwareBazaar", "ThreatFox", "Kaspersky OpenTIP", "Pulsedive", "Hybrid Analysis"],
   "auto_upload": false
 }

@@ -1,4 +1,14 @@
 # 变更记录
+## ir-forensic-analysis v4.5.2 (2026-08-13)
+**奇安信失陷检测情报接入（REST API）**
+### 新增
+- `threat_intel_lookup.py` 新增 `query_qianxin_compromise()`，调用 `https://ti.qianxin.com/api/v2/compromise` 查询 IP/域名/URL 的 APT/僵尸网络/C2/勒索关联情报
+- 配置新增「奇安信失陷检测情报」源（默认关闭，Key 留空），支持 `TI_QIANXIN_API_KEY` 环境变量，IP/域名查询顺序中加入奇安信
+- IP/域名情报 Markdown 表格新增「奇安信」列，展示命中数、攻击团伙与恶意家族
+- `threat_intel.json.example` 与 `THREAT_INTEL_PROVIDERS.md` 同步补充奇安信 REST/MCP 接入说明
+### 说明
+- QTI-MCP 适合 DeepChat/Cherry Studio 等 MCP 客户端；skill 的自动分析优先使用 REST API，仅需一个 API Key
+
 ## ir-forensic-analysis v4.5.1 (2026-08-13)
 **卡巴斯基 Token 自动续期 + VT Key 本地配置**
 ### 新增

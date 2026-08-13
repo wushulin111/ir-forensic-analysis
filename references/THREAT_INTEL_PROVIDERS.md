@@ -22,6 +22,7 @@
 | Kaspersky OpenTIP | IP/域名/Hash | 需要 | 本地已启用，Token 到期由 `kaspersky_token_manager.py` 自动续期；发布版需自行配置 |
 | GreyNoise Community | IP | 需要免费 Key | 默认关闭，配置 Key 后启用 |
 | Hybrid Analysis (Falcon Sandbox) | Hash | 需要免费 Key | 默认关闭，配置 Key 后启用 |
+| 奇安信失陷检测情报 | IP/域名 | 需要 | 默认关闭，配置 Key 后启用 |
 
 ## 全球常用威胁情报平台清单
 
@@ -30,7 +31,7 @@
 | 平台 | 入口 | API 情况 | 建议 |
 |------|------|----------|------|
 | 微步在线 X 情报社区 | https://x.threatbook.com/ | 有公开 API | 已接入 |
-| 奇安信威胁情报中心 | https://ti.qianxin.com/ | 企业级 API，无公开免费 API | 配置企业API后自动接入 |
+| 奇安信威胁情报中心 | https://ti.qianxin.com/ | REST API（失陷检测等）+ QTI-MCP | 已接入失陷检测接口，配置 Key 后自动参与比对；MCP 适合在 DeepChat/Cherry Studio 等客户端中使用 |
 | 启明星辰 VenusEye | https://www.venuseye.com.cn/ | 企业级 API | 配置企业API后自动接入 |
 | 绿盟威胁情报 NTI | https://ti.nsfocus.com/ | 企业级 API | 配置企业API后自动接入 |
 | 360 威胁情报中心 | https://ti.360.net/ | 无公开免费 API | 配置企业API后自动接入 |
@@ -88,6 +89,7 @@
    - `TI_CVERC_API_KEY`
    - `TI_PULSEDIVE_API_KEY`
    - `TI_KASPERSKY_OPENTIP_API_KEY`
+   - `TI_QIANXIN_API_KEY`
    - `TI_KASPERSKY_ACCOUNT_EMAIL`（自动续期用，可选）
    - `TI_KASPERSKY_ACCOUNT_PASSWORD`（自动续期用，可选）
    - `TI_GREYNOISE_API_KEY`
@@ -100,6 +102,8 @@
 环境变量优先级高于配置文件，脚本加载配置时会用环境变量覆盖同名字段。
 
 > 卡巴斯基 Token 最长一年有效期。`scripts/kaspersky_token_manager.py` 会在 Token 剩余 30 天以内时，使用配置中的 `account_email` / `account_password` 自动登录 OpenTIP 并生成新 Token，写回 `config/threat_intel.json`。手动执行：`python scripts/kaspersky_token_manager.py --refresh`。
+
+> 奇安信接入说明：REST API 直接使用 `apikey` 查询 `https://ti.qianxin.com/api/v2/compromise`，适合 skill 的自动交叉分析；QTI-MCP（`https://mcp.ti.qianxin.com/ti-stream-mcp` 或 `/ti-mcp/sse`）提供 16 个会话式查询函数，更适合 MCP 客户端。两种方式都需要向 `ti_support@qianxin.com` 申请 API Key。
 
 ## 命令行使用
 
