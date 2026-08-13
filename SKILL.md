@@ -443,12 +443,13 @@ mkdir -p /tmp/ir_extracted && cd /tmp/ir_extracted && unzip -o IR.zip
 
 ### ③ 威胁情报增强（增强维度4 + 扩展至文件Hash）
 分析维度4（网络外联）时，对外联 IP 增加威胁情报查询。同时新增**文件 Hash 查询**：取证包中的可疑文件 SHA256 也自动查情报，辅助维度1（可疑进程）和维度8（高级对抗）的判断。
+> 已扩展平台清单、Key 配置与新增平台方法见 [威胁情报平台接入说明](references/THREAT_INTEL_PROVIDERS.md)。
 **查询范围**：
 | 查询类型 | 查询对象 | 覆盖来源 | 对应维度 |
 |---------|---------|---------|---------|
-| IP 信誉 | 非本地外联 IP | 微步 / VT / AbuseIPDB / IPinfo | 维度4 |
-| Hash 检测 | 可疑文件 SHA256 | 微步 / VT / CVERC | 维度1/维度8 |
-| 域名信誉 | 远程域名 | 微步域名 API | 维度4 |
+| IP 信誉 | 非本地外联 IP | 微步 / OTX / URLhaus / VT / AbuseIPDB / GreyNoise / Pulsedive / Kaspersky / ThreatFox / IPinfo | 维度4 |
+| Hash 检测 | 可疑文件 SHA256 | 微步 / OTX / VT / CVERC / MalwareBazaar / ThreatFox / Kaspersky / Pulsedive / Hybrid | 维度1/维度8 |
+| 域名信誉 | 远程域名 | 微步 / OTX / URLhaus / URLScan.io / Pulsedive / Kaspersky / ThreatFox | 维度4 |
 **两种查询方式**：
 | 方式 | 说明 | 适用场景 |
 |------|------|----------|
@@ -462,12 +463,11 @@ mkdir -p /tmp/ir_extracted && cd /tmp/ir_extracted && unzip -o IR.zip
 | **AbuseIPDB** | API | 1000次/天（免费） | GET pi.abuseipdb.com/api/v2/check | IP 信誉评分专用，0-100分 |
 | **CVERC 国家平台** | API | 免费 | POST pi.cverc.org.cn/api/v1/file/check | 国内官方 Hash 查询/上传 |
 | **IPinfo.io** | 免费API | 完全免费 | GET ipinfo.io/{ip}/json | IP归属地/ASN/主机名 |
-| **微步在线手动查** | 手动 | 完全免费 | x.threatbook.com 手动输入 | API不可用时的备选 |
 **多源查询优先级（自动降级）**：
 `
-IP 查询：微步 → VT → AbuseIPDB → IPinfo.io
-Hash 查询：微步 → VT → CVERC
-域名查询：微步（仅此源）
+IP 查询：微步 → OTX → URLhaus → VT → AbuseIPDB → GreyNoise → Pulsedive → Kaspersky → ThreatFox → IPinfo
+Hash 查询：微步 → OTX → VT → CVERC → MalwareBazaar → ThreatFox → Kaspersky → Pulsedive → Hybrid
+域名查询：微步 → OTX → URLhaus → URLScan.io → Pulsedive → Kaspersky → ThreatFox
 `
 > 任一数据源失败（无 Key/限流/超时），自动降级到下一个可用源。不会因为某个源不可用而中断查询。
 **自动化流程**（已集成到 	hreat_intel_lookup.py 和 nalyze_forensics.py）：
@@ -477,13 +477,13 @@ Hash 查询：微步 → VT → CVERC
 提取 IOC（ips/domains/hashes）
     ↓
 多源并查：
-  ├─ IP → 微步 → VT → AbuseIPDB → IPinfo
-  ├─ Hash → 微步 → VT → CVERC
-  └─ 域名 → 微步
+  ├─ IP → 微步 → OTX → URLhaus → VT → AbuseIPDB → GreyNoise → Pulsedive → Kaspersky → ThreatFox → IPinfo
+  ├─ Hash → 微步 → OTX → VT → CVERC → MalwareBazaar → ThreatFox → Kaspersky → Pulsedive → Hybrid
+  └─ 域名 → 微步 → OTX → URLhaus → URLScan.io → Pulsedive → Kaspersky → ThreatFox
     ↓
 查询结果格式化 → 追加到报告的"威胁情报关联分析"章节
 `
-**手动查询步骤（LLM 分析时使用）**：
+**自动查询流程（由 scripts/threat_intel_lookup.py 自动执行，不要求人工复核）**：
 1. 从 timeline 中提取所有非本地外联 IP（排除 127.0.0.1/192.168.x.x/10.x.x.x 等）
 2. 从 file_hashes.csv / process_authenticode.csv 中提取可疑文件 SHA256
 3. 使用 	hreatbook MCP Server 的 ip_reputation 工具查 IP 信誉
@@ -500,7 +500,7 @@ Hash 查询：微步 → VT → CVERC
 |------|--------|------|-------|
 | d4ac4633... | 18/72 | 高危 | 恶意 |
 `
-> 微步 API Key 已配置在 config/threat_intel.json 中。VT/CVERC/AbuseIPDB 的 Key 如配置则自动启用，未配置时自动跳过该源。
+> config/threat_intel.json 不存放真实 Key，统一通过 `TI_*` 环境变量或配置文件的占位符配置；未配置 Key 的平台自动跳过，并在“情报交叉分析说明”中标注。
 > scripts/threat_intel_lookup.py 可在命令行独立运行测试。
 ### ④ 哈希链完整性验证（v3.4.0 新增）
 
@@ -893,6 +893,7 @@ Hash 查询：微步 → VT → CVERC
 - [取证包目录映射](references/DIRECTORY_MAPPING.md) — Windows/Linux 目录结构
 - [规则库格式说明](references/RULES_FORMAT.md)
 - [脚本使用说明](references/SCRIPTS_GUIDE.md) — 脚本参考实现
+- [威胁情报平台接入说明](references/THREAT_INTEL_PROVIDERS.md) — 全球平台清单与多源配置
 - [报告契约定义](references/REPORT_CONTRACT.md) — JSON报告Schema与校验规则
 
 ### 规则库

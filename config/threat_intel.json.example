@@ -1,5 +1,5 @@
 {
-  "description": "威胁情报API配置 — 支持多源查询和自动降级 | v4.3.0: +AlienVault OTX, +URLhaus",
+  "description": "威胁情报API配置示例 — 自动多源交叉分析 | 复制为 threat_intel.json 后填入自己的 Key",
   "sources": [
     {
       "name": "微步在线X情报社区",
@@ -10,8 +10,11 @@
       "domain_url": "https://api.threatbook.cn/v3/scene/domain_context",
       "hash_url": "https://api.threatbook.cn/v3/file/report",
       "api_key": "YOUR_THREATBOOK_API_KEY_HERE",
-      "note": "国内首选，IP/域名/文件Hash查询",
-      "fallback": "微步在线(手动查询)"
+      "env_key": "TI_THREATBOOK_API_KEY",
+      "key_required": true,
+      "result_key": "微步",
+      "ioc_types": ["ip", "domain", "hash"],
+      "note": "国内首选，IP/域名/文件Hash查询"
     },
     {
       "name": "AlienVault OTX",
@@ -20,7 +23,11 @@
       "method": "GET",
       "base_url": "https://otx.alienvault.com/api/v1",
       "api_key": "",
-      "note": "全球最大开源威胁情报社区，免费查询IP/域名/文件Hash的Pulse关联，支持恶意软件家族识别"
+      "env_key": "TI_OTX_API_KEY",
+      "key_required": false,
+      "result_key": "OTX",
+      "ioc_types": ["ip", "domain", "hash"],
+      "note": "全球最大开源威胁情报社区，免费查询IP/域名/文件Hash的Pulse关联"
     },
     {
       "name": "URLhaus",
@@ -28,6 +35,10 @@
       "type": "api",
       "method": "POST",
       "base_url": "https://urlhaus-api.abuse.ch/v1",
+      "api_key": "",
+      "key_required": false,
+      "result_key": "URLhaus",
+      "ioc_types": ["ip", "domain"],
       "note": "恶意URL分发追踪平台，查询某IP/域名历史上分发过哪些恶意样本"
     },
     {
@@ -36,10 +47,13 @@
       "type": "api",
       "method": "GET",
       "base_url": "https://www.virustotal.com/api/v3",
-      "api_key": "",
-      "note": "全球最大威胁情报平台，查Hash/IP/域名/URL；134字节响应=未收录",
-      "rate_limit": "4 req/min (免费版)",
-      "fallback": "微步在线"
+      "api_key": "YOUR_VIRUSTOTAL_API_KEY_HERE",
+      "env_key": "TI_VIRUSTOTAL_API_KEY",
+      "key_required": true,
+      "result_key": "VirusTotal",
+      "ioc_types": ["ip", "hash"],
+      "note": "全球最大威胁情报平台，查Hash/IP；134字节响应=未收录",
+      "rate_limit": "4 req/min (免费版)"
     },
     {
       "name": "CVERC国家计算机病毒协同分析平台",
@@ -48,7 +62,11 @@
       "method": "POST",
       "base_url": "https://api.cverc.org.cn/api/v1/file/check",
       "upload_url": "https://api.cverc.org.cn/api/v1/file/upload",
-      "api_key": "",
+      "api_key": "YOUR_CVERC_API_KEY_HERE",
+      "env_key": "TI_CVERC_API_KEY",
+      "key_required": true,
+      "result_key": "CVERC",
+      "ioc_types": ["hash"],
       "note": "国内官方平台，样本Hash查询和上传"
     },
     {
@@ -57,25 +75,120 @@
       "type": "api",
       "method": "GET",
       "base_url": "https://api.abuseipdb.com/api/v2/check",
-      "api_key": "",
-      "note": "IP信誉查询，免费版1000次/天",
-      "fallback_link": "https://www.abuseipdb.com/check/{ip}"
+      "api_key": "YOUR_ABUSEIPDB_API_KEY_HERE",
+      "env_key": "TI_ABUSEIPDB_API_KEY",
+      "key_required": true,
+      "result_key": "AbuseIPDB",
+      "ioc_types": ["ip"],
+      "note": "IP信誉查询，免费版1000次/天"
     },
     {
       "name": "IPinfo.io",
       "enabled": true,
-      "type": "free_api",
+      "type": "api",
+      "method": "GET",
       "base_url": "https://ipinfo.io/{ip}/json",
+      "api_key": "",
+      "key_required": false,
+      "result_key": "IPinfo",
+      "ioc_types": ["ip"],
       "note": "免费查询IP归属地/ASN/主机名"
     },
     {
-      "name": "微步在线(手动查询)",
+      "name": "ThreatFox",
+      "enabled": false,
+      "type": "api",
+      "method": "POST",
+      "base_url": "https://threatfox-api.abuse.ch/api/v1",
+      "api_key": "YOUR_THREATFOX_AUTH_KEY_HERE",
+      "env_key": "TI_THREATFOX_AUTH_KEY",
+      "key_required": true,
+      "result_key": "ThreatFox",
+      "ioc_types": ["ip", "domain", "hash"],
+      "note": "abuse.ch 开放IOC平台，需免费注册 Auth-Key"
+    },
+    {
+      "name": "MalwareBazaar",
+      "enabled": false,
+      "type": "api",
+      "method": "POST",
+      "base_url": "https://mb-api.abuse.ch/api/v1",
+      "api_key": "YOUR_MALWAREBAZAAR_AUTH_KEY_HERE",
+      "env_key": "TI_MALWAREBAZAAR_AUTH_KEY",
+      "key_required": true,
+      "result_key": "MalwareBazaar",
+      "ioc_types": ["hash"],
+      "note": "abuse.ch 恶意样本库，需免费注册 Auth-Key"
+    },
+    {
+      "name": "Pulsedive",
       "enabled": true,
-      "type": "manual",
-      "url": "https://x.threatbook.com/v5/ipDetail",
-      "note": "API不可用时，打开网页手动输入"
+      "type": "api",
+      "method": "GET",
+      "base_url": "https://pulsedive.com/api/indicator.php",
+      "api_key": "",
+      "env_key": "TI_PULSEDIVE_API_KEY",
+      "key_required": false,
+      "result_key": "Pulsedive",
+      "ioc_types": ["ip", "domain", "hash"],
+      "note": "免费情报平台，IP/域名/Hash风险评分；无Key限流更严"
+    },
+    {
+      "name": "URLScan.io",
+      "enabled": true,
+      "type": "api",
+      "method": "GET",
+      "base_url": "https://urlscan.io/api/v1/search",
+      "api_key": "",
+      "env_key": "TI_URLSCAN_API_KEY",
+      "key_required": false,
+      "result_key": "URLScan.io",
+      "ioc_types": ["domain"],
+      "note": "URL/Domain历史扫描记录，无需Key可查公开结果"
+    },
+    {
+      "name": "Kaspersky OpenTIP",
+      "enabled": false,
+      "type": "api",
+      "method": "GET",
+      "base_url": "https://opentip.kaspersky.com/api/v1",
+      "api_key": "YOUR_KASPERSKY_OPENTIP_API_KEY_HERE",
+      "env_key": "TI_KASPERSKY_OPENTIP_API_KEY",
+      "key_required": true,
+      "result_key": "Kaspersky",
+      "ioc_types": ["ip", "domain", "hash"],
+      "note": "卡巴斯基威胁情报门户，需注册API Token"
+    },
+    {
+      "name": "GreyNoise",
+      "enabled": false,
+      "type": "api",
+      "method": "GET",
+      "base_url": "https://api.greynoise.io/v3/community",
+      "api_key": "YOUR_GREYNOISE_API_KEY_HERE",
+      "env_key": "TI_GREYNOISE_API_KEY",
+      "key_required": true,
+      "result_key": "GreyNoise",
+      "ioc_types": ["ip"],
+      "note": "互联网扫描噪声/威胁分类，IP查询，免费社区Key"
+    },
+    {
+      "name": "Hybrid Analysis",
+      "enabled": false,
+      "type": "api",
+      "method": "GET",
+      "base_url": "https://www.hybrid-analysis.com/api/v2",
+      "api_key": "YOUR_HYBRID_ANALYSIS_API_KEY_HERE",
+      "env_key": "TI_HYBRID_ANALYSIS_API_KEY",
+      "key_required": true,
+      "result_key": "Hybrid Analysis",
+      "ioc_types": ["hash"],
+      "note": "Falcon Sandbox 样本情报，Hash查询，需免费API Key"
     }
   ],
-  "query_order": ["微步在线X情报社区", "AlienVault OTX", "URLhaus", "VirusTotal", "AbuseIPDB", "CVERC国家计算机病毒协同分析平台"],
+  "query_order": ["微步在线X情报社区", "AlienVault OTX", "URLhaus", "VirusTotal", "AbuseIPDB", "CVERC国家计算机病毒协同分析平台", "ThreatFox", "MalwareBazaar", "Pulsedive", "URLScan.io", "Kaspersky OpenTIP", "GreyNoise", "Hybrid Analysis"],
+  "ip_query_order": ["微步在线X情报社区", "AlienVault OTX", "URLhaus", "VirusTotal", "AbuseIPDB", "GreyNoise", "Pulsedive", "Kaspersky OpenTIP", "ThreatFox"],
+  "domain_query_order": ["微步在线X情报社区", "AlienVault OTX", "URLhaus", "URLScan.io", "Pulsedive", "Kaspersky OpenTIP", "ThreatFox"],
+  "hash_query_order": ["微步在线X情报社区", "AlienVault OTX", "VirusTotal", "CVERC国家计算机病毒协同分析平台", "MalwareBazaar", "ThreatFox", "Kaspersky OpenTIP", "Pulsedive", "Hybrid Analysis"],
   "auto_upload": false
 }

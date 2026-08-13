@@ -20,7 +20,15 @@ sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 def load_config() -> dict:
     config_path = Path(__file__).parent.parent / "config" / "threat_intel.json"
     with open(config_path, "r", encoding="utf-8") as f:
-        return json.load(f)
+        config = json.load(f)
+    # API Key 优先从环境变量补充，避免明文写死在配置里
+    for source in config.get("sources", []):
+        env_key = source.get("env_key", "")
+        if env_key:
+            env_value = os.environ.get(env_key, "")
+            if env_value:
+                source["api_key"] = env_value
+    return config
 
 
 def query_threatbook_ip(ip: str, api_key: str) -> dict:
@@ -271,6 +279,232 @@ def query_urlhaus_host(host: str) -> dict:
     except Exception as e:
         return {"error": f"URLhaus查询异常: {str(e)}"}
 
+
+def query_kaspersky(value: str, api_key: str, ioc_type: str) -> dict:
+    """卡巴斯基 OpenTIP 查询 hash/ip/domain，需注册 API Token"""
+    if not api_key:
+        return {"not_configured": True, "error": "Kaspersky OpenTIP API Key 未配置"}
+    try:
+        r = requests.get(
+            f"https://opentip.kaspersky.com/api/v1/search/{ioc_type}",
+            params={"request": value},
+            headers={"x-api-key": api_key},
+            timeout=15
+        )
+        data = r.json()
+        if not isinstance(data, dict):
+            return {"error": "Kaspersky返回格式异常"}
+        if "error" in data:
+            return {"error": data.get("error", "Kaspersky查询失败")}
+        return {
+            "source": "Kaspersky OpenTIP",
+            "zone": data.get("Zone", ""),
+            "reputation": data.get("Reputation", ""),
+            "detection": data.get("Detection", ""),
+            "threat_score": data.get("ThreatScore", ""),
+            "is_blacklisted": data.get("IsBlackListed", ""),
+            "first_seen": data.get("FirstSeen", ""),
+            "last_seen": data.get("LastSeen", ""),
+            "ioc": data.get("Ioc", ""),
+            "type": data.get("Type", "")
+        }
+    except Exception as e:
+        return {"error": f"Kaspersky查询异常: {str(e)}"}
+
+
+def query_threatfox(value: str, api_key: str = "") -> dict:
+    """ThreatFox 查询 IP/域名/Hash 历史恶意记录，需要免费注册 Auth-Key"""
+    try:
+        headers = {}
+        if api_key:
+            headers["Auth-Key"] = api_key
+        r = requests.post(
+            "https://threatfox-api.abuse.ch/api/v1/",
+            json={"query": "search_ioc", "search_term": value},
+            headers=headers,
+            timeout=15
+        )
+        data = r.json()
+        if data.get("query_status") != "ok":
+            return {"error": data.get("query_status", "unknown")}
+        iocs = data.get("data", [])
+        families = set()
+        threat_types = set()
+        tags = set()
+        for item in iocs:
+            fam = item.get("malware", "") or item.get("malware_printable", "")
+            if fam:
+                families.add(fam)
+            tt = item.get("threat_type", "")
+            if tt:
+                threat_types.add(tt)
+            for t in (item.get("tags", []) or []):
+                tags.add(t)
+        return {
+            "source": "ThreatFox",
+            "ioc_count": data.get("num_iocs", 0),
+            "malware_families": sorted(families)[:10],
+            "malware_str": ", ".join(sorted(families)[:5]),
+            "threat_types": sorted(threat_types)[:10],
+            "threat_str": ", ".join(sorted(threat_types)[:3]),
+            "tags": sorted(tags)[:10],
+            "first_seen": iocs[0].get("first_seen", "") if iocs else ""
+        }
+    except Exception as e:
+        return {"error": f"ThreatFox查询异常: {str(e)}"}
+
+
+def query_malwarebazaar_hash(file_hash: str, api_key: str = "") -> dict:
+    """MalwareBazaar 查询恶意样本Hash元数据，需要免费注册 Auth-Key"""
+    try:
+        headers = {}
+        if api_key:
+            headers["Auth-Key"] = api_key
+        r = requests.post(
+            "https://mb-api.abuse.ch/api/v1/",
+            data={"query": "get_info", "hash": file_hash},
+            headers=headers,
+            timeout=15
+        )
+        data = r.json()
+        if data.get("query_status") != "ok":
+            return {"error": data.get("query_status", "unknown")}
+        rows = data.get("data", [])
+        if not rows:
+            return {"not_found": True, "error": "MalwareBazaar未收录"}
+        row = rows[0]
+        return {
+            "source": "MalwareBazaar",
+            "signature": row.get("signature", ""),
+            "signature_str": row.get("signature", "未知"),
+            "tags": (row.get("tags") or [])[:10],
+            "file_type": row.get("file_type", ""),
+            "first_seen": row.get("first_seen", ""),
+            "last_seen": row.get("last_seen", ""),
+            "sha256": row.get("sha256_hash", ""),
+            "delivery_method": row.get("delivery_method", ""),
+            "reporter": row.get("reporter", "")
+        }
+    except Exception as e:
+        return {"error": f"MalwareBazaar查询异常: {str(e)}"}
+
+
+def query_pulsedive(value: str, api_key: str = "") -> dict:
+    """Pulsedive 查询 IP/域名/Hash 风险评分，无Key也能用但限流更严"""
+    try:
+        params = {"indicator": value, "pretty": 1}
+        if api_key:
+            params["key"] = api_key
+        r = requests.get("https://pulsedive.com/api/indicator.php", params=params, timeout=8)
+        data = r.json()
+        if isinstance(data, dict) and data.get("error"):
+            return {"error": data.get("error")}
+        if not isinstance(data, dict):
+            return {"error": "Pulsedive返回格式异常"}
+        return {
+            "source": "Pulsedive",
+            "risk": data.get("risk", ""),
+            "threat": data.get("threat", ""),
+            "threat_str": data.get("threat", ""),
+            "type": data.get("type", ""),
+            "stamp": data.get("stamp", ""),
+            "triaged": data.get("triaged", False),
+            "properties": data.get("properties", {}) if isinstance(data.get("properties"), dict) else {}
+        }
+    except Exception as e:
+        return {"error": f"Pulsedive查询异常: {str(e)}"}
+
+
+def query_greynoise_ip(ip: str, api_key: str) -> dict:
+    """GreyNoise Community API 查询IP噪声/威胁分类，需免费Key"""
+    if not api_key:
+        return {"not_configured": True, "error": "GreyNoise API Key 未配置"}
+    try:
+        headers = {"key": api_key, "accept": "application/json"}
+        r = requests.get(f"https://api.greynoise.io/v3/community/{ip}", headers=headers, timeout=10)
+        data = r.json()
+        if isinstance(data, dict) and data.get("message"):
+            return {"error": data.get("message")}
+        if not isinstance(data, dict):
+            return {"error": "GreyNoise返回格式异常"}
+        return {
+            "source": "GreyNoise",
+            "ip": data.get("ip", ""),
+            "noise": data.get("noise", False),
+            "riot": data.get("riot", False),
+            "classification": data.get("classification", ""),
+            "name": data.get("name", ""),
+            "last_seen": data.get("last_seen", "")
+        }
+    except Exception as e:
+        return {"error": f"GreyNoise查询异常: {str(e)}"}
+
+
+def query_hybrid_hash(file_hash: str, api_key: str) -> dict:
+    """Hybrid Analysis (Falcon Sandbox) 查询样本情报，需免费Key"""
+    if not api_key:
+        return {"not_configured": True, "error": "Hybrid Analysis API Key 未配置"}
+    try:
+        r = requests.get(
+            "https://www.hybrid-analysis.com/api/v2/search/hash",
+            params={"hash": file_hash},
+            headers={"api-key": api_key, "user-agent": "ir-forensic-analysis/1.0"},
+            timeout=20
+        )
+        data = r.json()
+        if isinstance(data, list) and data:
+            row = data[0]
+            return {
+                "source": "Hybrid Analysis",
+                "verdict": row.get("verdict", ""),
+                "threat_score": row.get("threat_score", ""),
+                "threat_level": row.get("threat_level", ""),
+                "sha256": row.get("sha256", ""),
+                "submit_name": row.get("submit_name", ""),
+                "av_detect": row.get("av_detect", ""),
+                "vx_family": row.get("vx_family", "")
+            }
+        if isinstance(data, dict) and data.get("error"):
+            return {"error": data.get("error")}
+        return {"not_found": True, "error": "Hybrid Analysis未收录"}
+    except Exception as e:
+        return {"error": f"Hybrid Analysis查询异常: {str(e)}"}
+
+
+def query_urlscan_domain(domain: str, api_key: str = "") -> dict:
+    """URLScan.io 查询域名历史扫描记录，无需Key可查公开结果"""
+    try:
+        headers = {"accept": "application/json"}
+        if api_key:
+            headers["API-Key"] = api_key
+        r = requests.get(
+            "https://urlscan.io/api/v1/search/",
+            params={"q": f"domain:{domain}", "size": 20},
+            headers=headers,
+            timeout=15
+        )
+        data = r.json()
+        if isinstance(data, dict) and data.get("message"):
+            return {"error": data.get("message")}
+        if not isinstance(data, dict):
+            return {"error": "URLScan返回格式异常"}
+        results = data.get("results", [])
+        malicious = 0
+        for item in results:
+            verdict = (item.get("page", {}) or {}).get("verdicts", {}) or {}
+            if (verdict.get("overall", {}) or {}).get("malicious", False):
+                malicious += 1
+        return {
+            "source": "URLScan.io",
+            "result_count": data.get("total", len(results)),
+            "malicious_count": malicious,
+            "first_scan": results[-1].get("task", {}).get("time", "") if results else "",
+            "last_scan": results[0].get("task", {}).get("time", "") if results else ""
+        }
+    except Exception as e:
+        return {"error": f"URLScan查询异常: {str(e)}"}
+
+
 def query_cverc_hash(file_hash: str, api_key: str) -> dict:
     """CVERC 文件Hash查询"""
     if not api_key:
@@ -344,20 +578,21 @@ def query_ipinfo(ip: str) -> dict:
         return {"error": f"IPinfo查询异常: {str(e)}"}
 
 
-def multi_source_query_ip(ip: str, config: dict) -> dict:
-    """多源IP查询 — 微步→OTX→URLhaus→VT→AbuseIPDB→IPinfo"""
-    results = {}
-    order = config.get("query_order", ["微步在线X情报社区", "AlienVault OTX", "URLhaus"])
+def _get_enabled_source(source_name: str, config: dict) -> Optional[dict]:
+    for s in config.get("sources", []):
+        if s.get("name") == source_name and s.get("enabled"):
+            return s
+    return None
 
+
+def multi_source_query_ip(ip: str, config: dict) -> dict:
+    """多源IP查询：微步/OTX/URLhaus/VT/AbuseIPDB/GreyNoise/Pulsedive/Kaspersky/ThreatFox"""
+    results = {}
+    order = config.get("ip_query_order", config.get("query_order", ["微步在线X情报社区", "AlienVault OTX", "URLhaus"]))
     for source_name in order:
-        source = None
-        for s in config.get("sources", []):
-            if s.get("name") == source_name and s.get("enabled"):
-                source = s
-                break
+        source = _get_enabled_source(source_name, config)
         if not source:
             continue
-
         api_key = source.get("api_key", "")
         if source_name == "微步在线X情报社区":
             r = query_threatbook_ip(ip, api_key)
@@ -387,26 +622,83 @@ def multi_source_query_ip(ip: str, config: dict) -> dict:
             r = query_abuseipdb(ip, api_key)
             if "error" not in r:
                 results["AbuseIPDB"] = r
-
+        elif source_name == "GreyNoise":
+            r = query_greynoise_ip(ip, api_key)
+            if "error" not in r:
+                results["GreyNoise"] = r
+            else:
+                results["GreyNoise_error"] = r.get("error", "")
+        elif source_name == "Pulsedive":
+            r = query_pulsedive(ip, api_key)
+            if "error" not in r:
+                results["Pulsedive"] = r
+        elif source_name == "Kaspersky OpenTIP":
+            r = query_kaspersky(ip, api_key, "ip")
+            if "error" not in r:
+                results["Kaspersky"] = r
+            else:
+                results["Kaspersky_error"] = r.get("error", "")
+        elif source_name == "ThreatFox":
+            r = query_threatfox(ip, api_key)
+            if "error" not in r:
+                results["ThreatFox"] = r
     # 补充IPinfo基础信息（最后补充，不阻断）
     results["IPinfo"] = query_ipinfo(ip)
     return results
 
 
-def multi_source_query_hash(file_hash: str, config: dict) -> dict:
-    """多源Hash查询"""
+def multi_source_query_domain(domain: str, config: dict) -> dict:
+    """多源域名查询：微步/OTX/URLhaus/URLScan/Pulsedive/Kaspersky/ThreatFox"""
     results = {}
-    order = config.get("query_order", [])
-    
+    order = config.get("domain_query_order", config.get("query_order", ["微步在线X情报社区", "AlienVault OTX", "URLhaus"]))
     for source_name in order:
-        source = None
-        for s in config.get("sources", []):
-            if s.get("name") == source_name and s.get("enabled"):
-                source = s
-                break
+        source = _get_enabled_source(source_name, config)
         if not source:
             continue
-        
+        api_key = source.get("api_key", "")
+        if source_name == "微步在线X情报社区":
+            r = query_threatbook_domain(domain, api_key)
+            if "error" not in r:
+                results["微步"] = r
+            else:
+                results["微步_error"] = r.get("error", "")
+        elif source_name == "AlienVault OTX":
+            r = query_otx_domain(domain, api_key)
+            if "error" not in r:
+                results["OTX"] = r
+        elif source_name == "URLhaus":
+            r = query_urlhaus_host(domain)
+            if "error" not in r:
+                results["URLhaus"] = r
+        elif source_name == "URLScan.io":
+            r = query_urlscan_domain(domain, api_key)
+            if "error" not in r:
+                results["URLScan.io"] = r
+        elif source_name == "Pulsedive":
+            r = query_pulsedive(domain, api_key)
+            if "error" not in r:
+                results["Pulsedive"] = r
+        elif source_name == "Kaspersky OpenTIP":
+            r = query_kaspersky(domain, api_key, "domain")
+            if "error" not in r:
+                results["Kaspersky"] = r
+            else:
+                results["Kaspersky_error"] = r.get("error", "")
+        elif source_name == "ThreatFox":
+            r = query_threatfox(domain, api_key)
+            if "error" not in r:
+                results["ThreatFox"] = r
+    return results
+
+
+def multi_source_query_hash(file_hash: str, config: dict) -> dict:
+    """多源Hash查询：微步/OTX/VT/CVERC/MalwareBazaar/ThreatFox/Kaspersky/Pulsedive/Hybrid"""
+    results = {}
+    order = config.get("hash_query_order", config.get("query_order", []))
+    for source_name in order:
+        source = _get_enabled_source(source_name, config)
+        if not source:
+            continue
         api_key = source.get("api_key", "")
         if source_name == "微步在线X情报社区":
             r = query_threatbook_hash(file_hash, api_key)
@@ -429,7 +721,30 @@ def multi_source_query_hash(file_hash: str, config: dict) -> dict:
             r = query_cverc_hash(file_hash, api_key)
             if "error" not in r:
                 results["CVERC"] = r
-    
+        elif source_name == "MalwareBazaar":
+            r = query_malwarebazaar_hash(file_hash, api_key)
+            if "error" not in r:
+                results["MalwareBazaar"] = r
+        elif source_name == "ThreatFox":
+            r = query_threatfox(file_hash, api_key)
+            if "error" not in r:
+                results["ThreatFox"] = r
+        elif source_name == "Kaspersky OpenTIP":
+            r = query_kaspersky(file_hash, api_key, "hash")
+            if "error" not in r:
+                results["Kaspersky"] = r
+            else:
+                results["Kaspersky_error"] = r.get("error", "")
+        elif source_name == "Pulsedive":
+            r = query_pulsedive(file_hash, api_key)
+            if "error" not in r:
+                results["Pulsedive"] = r
+        elif source_name == "Hybrid Analysis":
+            r = query_hybrid_hash(file_hash, api_key)
+            if "error" not in r:
+                results["Hybrid Analysis"] = r
+            else:
+                results["Hybrid_error"] = r.get("error", "")
     return results
 
 
@@ -450,22 +765,13 @@ def lookup_iocs(iocs: dict, config: dict = None) -> dict:
                 seen_ips.add(ip)
                 results["ips"][ip] = multi_source_query_ip(ip, config)
     
-    # 查域名（微步 + OTX）
+    # 查域名（按 domain_query_order 多源查询）
     seen_domains = set()
-    tb_key = ""
-    otx_key = ""
-    for s in config.get("sources", []):
-        if s.get("name") == "微步在线X情报社区":
-            tb_key = s.get("api_key", "")
-        elif s.get("name") == "AlienVault OTX":
-            otx_key = s.get("api_key", "")
     for entry in iocs.get("domains", []):
         domain = entry.get("domain", "") if isinstance(entry, dict) else entry
         if domain and domain not in seen_domains:
             seen_domains.add(domain)
-            domain_result = {"微步": query_threatbook_domain(domain, tb_key)}
-            domain_result["OTX"] = query_otx_domain(domain, otx_key)
-            results["domains"][domain] = domain_result
+            results["domains"][domain] = multi_source_query_domain(domain, config)
     
     # 查Hash
     seen_hashes = set()
@@ -478,63 +784,175 @@ def lookup_iocs(iocs: dict, config: dict = None) -> dict:
     return results
 
 
-def format_threat_intel(results: dict) -> str:
+def _cell(result: dict, value_key: str, fmt=None) -> str:
+    """把单个情报源结果格式化为表格单元格"""
+    if not result:
+        return "-"
+    if result.get("not_found"):
+        return "未收录"
+    if result.get("error"):
+        return "err"
+    value = result.get(value_key, "-")
+    if value in (None, "", "-"):
+        return "-"
+    if fmt:
+        try:
+            return fmt(value, result)
+        except Exception:
+            return str(value)
+    return str(value)
+
+
+def _threatbook_level(result: dict) -> str:
+    """兼容微步 IP(severity) 与 Hash(summary.threat_level) 的威胁等级取值"""
+    if not result:
+        return "-"
+    if result.get("error"):
+        return "err"
+    severity = result.get("severity")
+    if severity:
+        return str(severity)
+    summary = result.get("summary") or {}
+    level = summary.get("threat_level", "")
+    return str(level) if level else "-"
+
+
+def _cross_analysis_summary(results: dict, config: dict) -> str:
+    """生成情报交叉分析说明，标注各平台参与状态与 Key 配置要求"""
+    lines = [
+        "### 情报交叉分析说明",
+        "",
+        "本次分析已对以下平台进行自动交叉比对，结果以各平台返回数据为准：",
+        "",
+        "| 平台 | 覆盖类型 | 需要Key | 本次状态 |",
+        "|------|----------|--------|----------|",
+    ]
+    ioc_types = ["ips", "domains", "hashes"]
+    for source in config.get("sources", []):
+        if source.get("type") != "api" or not source.get("enabled"):
+            continue
+        name = source.get("name", "")
+        result_key = source.get("result_key", name)
+        ioc_types_str = "/".join(source.get("ioc_types") or [])
+        key_required = bool(source.get("key_required", False))
+        key_need = "是" if key_required else "否"
+        has_key = bool(source.get("api_key", ""))
+        found = False
+        for ioc_type in ioc_types:
+            for item in results.get(ioc_type, {}).values():
+                if result_key in item:
+                    found = True
+                    break
+            if found:
+                break
+        if found:
+            status = "已自动比对"
+        elif key_required and not has_key:
+            status = "未配置Key，已跳过"
+        else:
+            status = "已查询，无匹配记录"
+        lines.append(f"| {name} | {ioc_types_str or '-'} | {key_need} | {status} |")
+    lines.append("")
+    lines.append("> 需要 Key 的平台请通过环境变量或 config/threat_intel.json 配置，配置后自动参与下次分析。")
+    return "\n".join(lines) + "\n"
+
+
+def format_threat_intel(results: dict, config: dict = None) -> str:
     """格式化情报结果为Markdown"""
+    if config is None:
+        config = load_config()
     md = "\n## 威胁情报关联分析\n\n"
-    
+
     # IP查询结果
     ip_results = results.get("ips", {})
     if ip_results:
-        md += "### IP情报\n\n| IP | 微步 | OTX | URLhaus | VT | AbuseIPDB | IPinfo |\n"
-        md += "|------|------|-----|---------|----|----------|--------|\n"
+        md += "### IP情报\n\n| IP | 微步 | OTX | URLhaus | VT | AbuseIPDB | GreyNoise | Pulsedive | Kaspersky | ThreatFox | IPinfo |\n"
+        md += "|------|------|-----|---------|----|----------|-----------|-----------|-----------|-----------|--------|\n"
         for ip, info in ip_results.items():
-            tb = info.get("微步", {})
-            tb_sev = tb.get("severity", "-") if not tb.get("error") else "err"
+            tb_sev = _threatbook_level(info.get("微步"))
             vt = info.get("VirusTotal", {})
-            vt_cnt = vt.get("malicious_count", "-") if not vt.get("error") else "-"
+            vt_cnt = _cell(vt, "malicious_count", lambda v, r: f"{v}/{r.get('total_engines','?')}")
             otx = info.get("OTX", {})
-            otx_str = f"P{otx.get('pulse_count',0)}/{otx.get('malware_str','-')}" if not otx.get("error") else "-"
+            otx_str = _cell(otx, "malware_str", lambda v, r: f"P{r.get('pulse_count',0)}/{v}")
             uh = info.get("URLhaus", {})
-            uh_str = f"{uh.get('url_count',0)}url/{uh.get('threat_str','-')}" if not uh.get("error") else "-"
+            uh_str = _cell(uh, "threat_str", lambda v, r: f"{r.get('url_count',0)}url/{v}")
             ab = info.get("AbuseIPDB", {})
-            ab_score = f"{ab.get('abuse_score','?')}/100" if not ab.get("error") else "-"
+            ab_score = _cell(ab, "abuse_score", lambda v, r: f"{v}/100")
+            gn_str = _cell(info.get("GreyNoise"), "classification")
+            pd_str = _cell(info.get("Pulsedive"), "risk", lambda v, r: f"{v}/{r.get('threat_str','-')}")
+            kasp_str = _cell(info.get("Kaspersky"), "zone", lambda v, r: f"{v}/{r.get('threat_score','-')}")
+            tf_str = _cell(info.get("ThreatFox"), "malware_str", lambda v, r: f"{r.get('ioc_count',0)}ioc/{v}")
             ipi = info.get("IPinfo", {})
-            loc = f"{ipi.get('city','?')},{ipi.get('country','?')}" if not ipi.get("error") else "-"
-            md += f"| {ip} | {tb_sev} | {otx_str} | {uh_str} | {vt_cnt}/{vt.get('total_engines','?')} | {ab_score} | {loc} |\n"
+            loc = _cell(ipi, "city", lambda v, r: f"{v},{r.get('country','?')}")
+            md += f"| {ip} | {tb_sev} | {otx_str} | {uh_str} | {vt_cnt} | {ab_score} | {gn_str} | {pd_str} | {kasp_str} | {tf_str} | {loc} |\n"
     else:
-        md += "✅ 无非可信IP需要查询\n\n"
-    
+        md += "未发现需要查询的IP\n\n"
+
+    # 域名查询结果
+    domain_results = results.get("domains", {})
+    if domain_results:
+        md += "\n### 域名情报\n\n| 域名 | 微步 | OTX | URLhaus | URLScan | Pulsedive | Kaspersky | ThreatFox |\n"
+        md += "|------|------|-----|---------|---------|-----------|-----------|-----------|\n"
+        for domain, info in domain_results.items():
+            tb_sev = _threatbook_level(info.get("微步"))
+            otx = info.get("OTX", {})
+            otx_str = _cell(otx, "malware_str", lambda v, r: f"P{r.get('pulse_count',0)}/{v}")
+            uh = info.get("URLhaus", {})
+            uh_str = _cell(uh, "threat_str", lambda v, r: f"{r.get('url_count',0)}url/{v}")
+            us = info.get("URLScan.io", {})
+            us_str = _cell(us, "result_count", lambda v, r: f"{v}scan/{r.get('malicious_count',0)}mal")
+            pd_str = _cell(info.get("Pulsedive"), "risk", lambda v, r: f"{v}/{r.get('threat_str','-')}")
+            kasp_str = _cell(info.get("Kaspersky"), "zone", lambda v, r: f"{v}/{r.get('threat_score','-')}")
+            tf_str = _cell(info.get("ThreatFox"), "malware_str", lambda v, r: f"{r.get('ioc_count',0)}ioc/{v}")
+            md += f"| `{domain}` | {tb_sev} | {otx_str} | {uh_str} | {us_str} | {pd_str} | {kasp_str} | {tf_str} |\n"
+
     # Hash查询结果
     hash_results = results.get("hashes", {})
     if hash_results:
-        md += "\n### 文件Hash情报\n\n| Hash | 微步 | OTX | VT检测 | CVERC |\n"
-        md += "|------|------|-----|--------|------|\n"
+        md += "\n### 文件Hash情报\n\n| Hash | 微步 | OTX | VT检测 | CVERC | MalwareBazaar | Kaspersky | Pulsedive | ThreatFox | Hybrid |\n"
+        md += "|------|------|-----|--------|------|---------------|-----------|-----------|-----------|--------|\n"
         for h, info in hash_results.items():
             vt = info.get("VirusTotal", {})
-            vt_str = f"{vt.get('malicious_count','?')}/{vt.get('total_engines','?')}" if not vt.get("error") else vt.get("error", "-")
-            tb = info.get("微步", {})
-            tb_str = tb.get("severity", "-") if not tb.get("error") else "-"
+            vt_str = _cell(vt, "malicious_count", lambda v, r: f"{v}/{r.get('total_engines','?')}")
+            tb_str = _threatbook_level(info.get("微步"))
             otx_h = info.get("OTX", {})
-            otx_h_str = f"P{otx_h.get('pulse_count',0)}/{otx_h.get('malware_str','-')}" if not otx_h.get("error") else "-"
-            cv = info.get("CVERC", {})
-            cv_str = cv.get("verdict", "-") if not cv.get("error") else "-"
-            md += f"| `{h[:16]}...` | {tb_str} | {otx_h_str} | {vt_str} | {cv_str} |\n"
-        md += "✅ 无非可信Hash需要查询\n\n"
-    
+            otx_h_str = _cell(otx_h, "malware_str", lambda v, r: f"P{r.get('pulse_count',0)}/{v}")
+            cv_str = _cell(info.get("CVERC"), "verdict")
+            mb_str = _cell(info.get("MalwareBazaar"), "signature")
+            kasp_str = _cell(info.get("Kaspersky"), "zone", lambda v, r: f"{v}/{r.get('detection','-')}")
+            pd_str = _cell(info.get("Pulsedive"), "risk", lambda v, r: f"{v}/{r.get('threat_str','-')}")
+            tf_str = _cell(info.get("ThreatFox"), "malware_str", lambda v, r: f"{r.get('ioc_count',0)}ioc/{v}")
+            hy_str = _cell(info.get("Hybrid Analysis"), "verdict", lambda v, r: f"{v}/{r.get('threat_score','-')}")
+            md += f"| `{h[:16]}...` | {tb_str} | {otx_h_str} | {vt_str} | {cv_str} | {mb_str} | {kasp_str} | {pd_str} | {tf_str} | {hy_str} |\n"
+
+    md += "\n" + _cross_analysis_summary(results, config)
+
     return md
 
 
 if __name__ == "__main__":
-    # 测试
-    test_iocs = {
-        "ips": [
-            {"ip": "8.8.8.8", "port": 443},
-            {"ip": "45.33.32.156", "port": 6666}
-        ],
-        "domains": ["google.com"],
-        "hashes": ["d41d8cd98f00b204e9800998ecf8427e"]
-    }
-    result = lookup_iocs(test_iocs)
+    import argparse
+    parser = argparse.ArgumentParser(description="多源威胁情报查询工具")
+    parser.add_argument("--ip", help="查询IP")
+    parser.add_argument("--domain", help="查询域名")
+    parser.add_argument("--hash", help="查询文件Hash")
+    parser.add_argument("--raw", action="store_true", help="同时输出原始JSON")
+    args = parser.parse_args()
+
+    if not (args.ip or args.domain or args.hash):
+        parser.print_help()
+        sys.exit(0)
+
+    iocs = {"ips": [], "domains": [], "hashes": []}
+    if args.ip:
+        iocs["ips"].append(args.ip)
+    if args.domain:
+        iocs["domains"].append(args.domain)
+    if args.hash:
+        iocs["hashes"].append(args.hash)
+
+    result = lookup_iocs(iocs)
     print(format_threat_intel(result))
-    print("\n--- RAW ---")
-    print(json.dumps(result, indent=2, ensure_ascii=False)[:3000])
+    if args.raw:
+        print("\n--- RAW ---")
+        print(json.dumps(result, indent=2, ensure_ascii=False))

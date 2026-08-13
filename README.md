@@ -1,6 +1,6 @@
 # ir-forensic-analysis
 
-> 应急响应取证分析 Skill — 静态取证包深度分析，覆盖 11 大检测维度，支持 6 源威胁情报关联 + MITRE ATT&CK 映射 + 因果链攻击路径复盘
+> 应急响应取证分析 Skill — 静态取证包深度分析，覆盖 11 大检测维度，支持多源威胁情报自动交叉分析 + MITRE ATT&CK 映射 + 因果链攻击路径复盘
 
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![Version](https://img.shields.io/badge/version-5.3.3-green)](CHANGELOG.md)
@@ -13,7 +13,7 @@
 - **Windows 采集脚本** — `IR_Collect_v5.3.ps1`（默认快照 + `-DeepForensic` 深度取证 + `-Target` 定向采集）/ `IR_Collect_v5.3_GUI.exe`（自包含中文选项弹窗版），管理员运行
 - **Linux 采集脚本** — `who.sh`（司稽 v8.1，sudo 运行）
 - **macOS 采集脚本** — `mac_collect.sh` v2.1（兼容 10.15+ / Intel+Apple Silicon，覆盖系统、网络、进程、持久化、账号、浏览器、日志、安全配置）
-- **威胁情报模块** — 6 源查询（微步/OTX/URLhaus/VT/CVERC/AbuseIPDB）
+- **威胁情报模块** — 多源自动交叉分析（微步/OTX/URLhaus/VT/CVERC/AbuseIPDB/Pulsedive/URLScan/ThreatFox 等）
 - **检测规则库** — JSON + YARA，含银狐专项 34 条规则 / 5265 恶意域名
 
 ## v5.3.3 更新说明
@@ -138,7 +138,7 @@ python scripts/analyze_forensics.py ./extracted/IR_HOSTNAME_TIMESTAMP/ -r ./rule
 
 ```bash
 cp config/threat_intel.json.example config/threat_intel.json
-# 编辑 config/threat_intel.json 填入你的 API Key
+# 编辑 config/threat_intel.json 填入你的 API Key，或直接设置 TI_* 环境变量
 ```
 
 ## 11 大检测维度
@@ -159,14 +159,24 @@ cp config/threat_intel.json.example config/threat_intel.json
 
 ## 威胁情报源
 
-| 源 | 类型 | 免费 |
-|----|------|------|
-| 微步在线 | IP/域名/Hash | 需 Key |
-| AlienVault OTX | IP/域名/Hash（Pulse 关联） | ✅ |
-| URLhaus | IP/域名（恶意 URL 分发） | ✅ |
-| VirusTotal | IP/Hash | 需 Key |
-| CVERC | Hash | 需 Key |
-| AbuseIPDB | IP（信誉评分） | 1000次/天 |
+分析时会对已配置平台自动交叉比对，报告会标注各平台参与状态和 Key 配置要求。
+
+| 源 | 类型 | 需要 Key |
+|----|------|----------|
+| 微步在线 | IP/域名/Hash | 是 |
+| AlienVault OTX | IP/域名/Hash（Pulse 关联） | 否 |
+| URLhaus | IP/域名（恶意 URL 分发） | 否 |
+| VirusTotal | IP/Hash | 是 |
+| CVERC | Hash | 是 |
+| AbuseIPDB | IP（信誉评分） | 是 |
+| Pulsedive | IP/域名/Hash（风险评分） | 否（可选 Key） |
+| URLScan.io | 域名历史扫描 | 否（可选 Key） |
+| ThreatFox | IP/域名/Hash | 是（免费 Auth-Key） |
+| MalwareBazaar | Hash | 是（免费 Auth-Key） |
+| Kaspersky OpenTIP | IP/域名/Hash | 是（免费 Token） |
+| GreyNoise | IP（噪声/威胁分类） | 是（免费社区 Key） |
+| Hybrid Analysis | Hash（沙箱情报） | 是（免费 API Key） |
+| IPinfo.io | IP 归属/ASN | 否 |
 
 ## 目录结构
 

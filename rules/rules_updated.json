@@ -58,7 +58,7 @@
     {
       "rule_id": "PROC-9438",
       "type": "suspicious_path",
-      "pattern": "CommandLine=\"C:\\Users\\shulin\\AppData\\Roaming\\Tence",
+      "pattern": "CommandLine=\"C:\\Users\\USERNAME\\AppData\\Roaming\\Tence",
       "severity": "high",
       "description": "用户目录执行: 可执行文件从用户AppData/Public/ProgramData运行",
       "confidence": 0.75,
@@ -69,7 +69,7 @@
     {
       "rule_id": "PROC-8311",
       "type": "suspicious_path",
-      "pattern": "ExecutablePath=C:\\Users\\shulin\\AppData\\Roaming\\Ten",
+      "pattern": "ExecutablePath=C:\\Users\\USERNAME\\AppData\\Roaming\\Ten",
       "severity": "high",
       "description": "用户目录执行: 可执行文件从用户AppData/Public/ProgramData运行",
       "confidence": 0.75,
@@ -80,7 +80,7 @@
     {
       "rule_id": "PROC-6867",
       "type": "suspicious_path",
-      "pattern": "CommandLine=\"C:\\Users\\shulin\\AppData\\Roaming\\Tence",
+      "pattern": "CommandLine=\"C:\\Users\\USERNAME\\AppData\\Roaming\\Tence",
       "severity": "high",
       "description": "用户目录执行: 可执行文件从用户AppData/Public/ProgramData运行",
       "confidence": 0.75,
@@ -91,7 +91,7 @@
     {
       "rule_id": "PROC-2632",
       "type": "suspicious_path",
-      "pattern": "CommandLine=\"C:\\Users\\shulin\\AppData\\Roaming\\Tence",
+      "pattern": "CommandLine=\"C:\\Users\\USERNAME\\AppData\\Roaming\\Tence",
       "severity": "high",
       "description": "用户目录执行: 可执行文件从用户AppData/Public/ProgramData运行",
       "confidence": 0.75,
@@ -102,7 +102,7 @@
     {
       "rule_id": "PROC-3407",
       "type": "suspicious_path",
-      "pattern": "CommandLine=\"C:\\Users\\shulin\\AppData\\Roaming\\Tence",
+      "pattern": "CommandLine=\"C:\\Users\\USERNAME\\AppData\\Roaming\\Tence",
       "severity": "high",
       "description": "用户目录执行: 可执行文件从用户AppData/Public/ProgramData运行",
       "confidence": 0.75,
@@ -113,7 +113,7 @@
     {
       "rule_id": "PROC-9324",
       "type": "suspicious_path",
-      "pattern": "CommandLine=\"C:\\Users\\shulin\\AppData\\Roaming\\Tence",
+      "pattern": "CommandLine=\"C:\\Users\\USERNAME\\AppData\\Roaming\\Tence",
       "severity": "high",
       "description": "用户目录执行: 可执行文件从用户AppData/Public/ProgramData运行",
       "confidence": 0.75,
@@ -124,7 +124,7 @@
     {
       "rule_id": "PROC-3777",
       "type": "suspicious_path",
-      "pattern": "ExecutablePath=C:\\Users\\shulin\\AppData\\Roaming\\Ten",
+      "pattern": "ExecutablePath=C:\\Users\\USERNAME\\AppData\\Roaming\\Ten",
       "severity": "high",
       "description": "用户目录执行: 可执行文件从用户AppData/Public/ProgramData运行",
       "confidence": 0.75,
@@ -135,7 +135,7 @@
     {
       "rule_id": "PROC-3003",
       "type": "suspicious_path",
-      "pattern": "CommandLine=\"C:\\Users\\shulin\\AppData\\Local\\google\\",
+      "pattern": "CommandLine=\"C:\\Users\\USERNAME\\AppData\\Local\\google\\",
       "severity": "high",
       "description": "用户目录执行: 可执行文件从用户AppData/Public/ProgramData运行",
       "confidence": 0.75,
@@ -146,7 +146,7 @@
     {
       "rule_id": "PROC-7898",
       "type": "suspicious_path",
-      "pattern": "ExecutablePath=C:\\Users\\shulin\\AppData\\Local\\googl",
+      "pattern": "ExecutablePath=C:\\Users\\USERNAME\\AppData\\Local\\googl",
       "severity": "high",
       "description": "用户目录执行: 可执行文件从用户AppData/Public/ProgramData运行",
       "confidence": 0.75,
@@ -157,7 +157,7 @@
     {
       "rule_id": "PROC-4696",
       "type": "suspicious_path",
-      "pattern": "CommandLine=C:\\Users\\shulin\\AppData\\Local\\google\\C",
+      "pattern": "CommandLine=C:\\Users\\USERNAME\\AppData\\Local\\google\\C",
       "severity": "high",
       "description": "用户目录执行: 可执行文件从用户AppData/Public/ProgramData运行",
       "confidence": 0.75,
@@ -168,7 +168,7 @@
     {
       "rule_id": "PROC-7778",
       "type": "suspicious_path",
-      "pattern": "CommandLine=\"C:\\Users\\shulin\\AppData\\Local\\google\\",
+      "pattern": "CommandLine=\"C:\\Users\\USERNAME\\AppData\\Local\\google\\",
       "severity": "high",
       "description": "用户目录执行: 可执行文件从用户AppData/Public/ProgramData运行",
       "confidence": 0.75,
@@ -179,7 +179,7 @@
     {
       "rule_id": "PROC-4769",
       "type": "suspicious_path",
-      "pattern": "CommandLine=\"C:\\Users\\shulin\\AppData\\Local\\google\\",
+      "pattern": "CommandLine=\"C:\\Users\\USERNAME\\AppData\\Local\\google\\",
       "severity": "high",
       "description": "用户目录执行: 可执行文件从用户AppData/Public/ProgramData运行",
       "confidence": 0.75,
@@ -190,7 +190,7 @@
     {
       "rule_id": "PROC-8520",
       "type": "suspicious_path",
-      "pattern": "CommandLine=\"C:\\Users\\shulin\\AppData\\Local\\google\\",
+      "pattern": "CommandLine=\"C:\\Users\\USERNAME\\AppData\\Local\\google\\",
       "severity": "high",
       "description": "用户目录执行: 可执行文件从用户AppData/Public/ProgramData运行",
       "confidence": 0.75,
@@ -201,7 +201,7 @@
     {
       "rule_id": "PROC-5839",
       "type": "suspicious_path",
-      "pattern": "CommandLine=\"C:\\Users\\shulin\\AppData\\Local\\JetBrai",
+      "pattern": "CommandLine=\"C:\\Users\\USERNAME\\AppData\\Local\\JetBrai",
       "severity": "high",
       "description": "用户目录执行: 可执行文件从用户AppData/Public/ProgramData运行",
       "confidence": 0.75,
@@ -212,7 +212,7 @@
     {
       "rule_id": "PROC-4072",
       "type": "suspicious_path",
-      "pattern": "ExecutablePath=C:\\Users\\shulin\\AppData\\Local\\JetBr",
+      "pattern": "ExecutablePath=C:\\Users\\USERNAME\\AppData\\Local\\JetBr",
       "severity": "high",
       "description": "用户目录执行: 可执行文件从用户AppData/Public/ProgramData运行",
       "confidence": 0.75,
@@ -223,7 +223,7 @@
     {
       "rule_id": "PROC-5489",
       "type": "suspicious_path",
-      "pattern": "CommandLine=C:\\Users\\shulin\\AppData\\Local\\JetBrain",
+      "pattern": "CommandLine=C:\\Users\\USERNAME\\AppData\\Local\\JetBrain",
       "severity": "high",
       "description": "用户目录执行: 可执行文件从用户AppData/Public/ProgramData运行",
       "confidence": 0.75,
@@ -234,7 +234,7 @@
     {
       "rule_id": "PROC-3410",
       "type": "suspicious_path",
-      "pattern": "ExecutablePath=C:\\Users\\shulin\\AppData\\Local\\JetBr",
+      "pattern": "ExecutablePath=C:\\Users\\USERNAME\\AppData\\Local\\JetBr",
       "severity": "high",
       "description": "用户目录执行: 可执行文件从用户AppData/Public/ProgramData运行",
       "confidence": 0.75,
@@ -245,7 +245,7 @@
     {
       "rule_id": "PROC-4950",
       "type": "suspicious_path",
-      "pattern": "CommandLine=\"C:\\Users\\shulin\\AppData\\Roaming\\Tence",
+      "pattern": "CommandLine=\"C:\\Users\\USERNAME\\AppData\\Roaming\\Tence",
       "severity": "high",
       "description": "用户目录执行: 可执行文件从用户AppData/Public/ProgramData运行",
       "confidence": 0.75,
@@ -256,7 +256,7 @@
     {
       "rule_id": "PROC-6935",
       "type": "suspicious_path",
-      "pattern": "ExecutablePath=C:\\Users\\shulin\\AppData\\Roaming\\Ten",
+      "pattern": "ExecutablePath=C:\\Users\\USERNAME\\AppData\\Roaming\\Ten",
       "severity": "high",
       "description": "用户目录执行: 可执行文件从用户AppData/Public/ProgramData运行",
       "confidence": 0.75,
@@ -267,7 +267,7 @@
     {
       "rule_id": "PROC-7778",
       "type": "suspicious_path",
-      "pattern": "CommandLine=C:\\Users\\shulin\\AppData\\Roaming\\Tencen",
+      "pattern": "CommandLine=C:\\Users\\USERNAME\\AppData\\Roaming\\Tencen",
       "severity": "high",
       "description": "用户目录执行: 可执行文件从用户AppData/Public/ProgramData运行",
       "confidence": 0.75,
@@ -278,7 +278,7 @@
     {
       "rule_id": "PROC-9873",
       "type": "suspicious_path",
-      "pattern": "CommandLine=\"C:\\Users\\shulin\\AppData\\Roaming\\Tence",
+      "pattern": "CommandLine=\"C:\\Users\\USERNAME\\AppData\\Roaming\\Tence",
       "severity": "high",
       "description": "用户目录执行: 可执行文件从用户AppData/Public/ProgramData运行",
       "confidence": 0.75,
@@ -289,7 +289,7 @@
     {
       "rule_id": "PROC-8112",
       "type": "suspicious_path",
-      "pattern": "CommandLine=\"C:\\Users\\shulin\\AppData\\Roaming\\Tence",
+      "pattern": "CommandLine=\"C:\\Users\\USERNAME\\AppData\\Roaming\\Tence",
       "severity": "high",
       "description": "用户目录执行: 可执行文件从用户AppData/Public/ProgramData运行",
       "confidence": 0.75,
@@ -300,7 +300,7 @@
     {
       "rule_id": "PROC-9184",
       "type": "suspicious_path",
-      "pattern": "ExecutablePath=C:\\Users\\shulin\\AppData\\Local\\Micro",
+      "pattern": "ExecutablePath=C:\\Users\\USERNAME\\AppData\\Local\\Micro",
       "severity": "high",
       "description": "用户目录执行: 可执行文件从用户AppData/Public/ProgramData运行",
       "confidence": 0.75,
@@ -311,7 +311,7 @@
     {
       "rule_id": "PROC-1480",
       "type": "suspicious_path",
-      "pattern": "CommandLine=\"C:\\Users\\shulin\\AppData\\Local\\Microso",
+      "pattern": "CommandLine=\"C:\\Users\\USERNAME\\AppData\\Local\\Microso",
       "severity": "high",
       "description": "用户目录执行: 可执行文件从用户AppData/Public/ProgramData运行",
       "confidence": 0.75,
@@ -322,7 +322,7 @@
     {
       "rule_id": "PROC-2313",
       "type": "suspicious_path",
-      "pattern": "ExecutablePath=C:\\Users\\shulin\\AppData\\Local\\Micro",
+      "pattern": "ExecutablePath=C:\\Users\\USERNAME\\AppData\\Local\\Micro",
       "severity": "high",
       "description": "用户目录执行: 可执行文件从用户AppData/Public/ProgramData运行",
       "confidence": 0.75,
@@ -344,7 +344,7 @@
     {
       "rule_id": "PROC-3429",
       "type": "suspicious_path",
-      "pattern": "CommandLine=\"C:\\Users\\shulin\\AppData\\Local\\Microso",
+      "pattern": "CommandLine=\"C:\\Users\\USERNAME\\AppData\\Local\\Microso",
       "severity": "high",
       "description": "用户目录执行: 可执行文件从用户AppData/Public/ProgramData运行",
       "confidence": 0.75,
@@ -355,7 +355,7 @@
     {
       "rule_id": "PROC-5767",
       "type": "suspicious_path",
-      "pattern": "ExecutablePath=C:\\Users\\shulin\\AppData\\Local\\Micro",
+      "pattern": "ExecutablePath=C:\\Users\\USERNAME\\AppData\\Local\\Micro",
       "severity": "high",
       "description": "用户目录执行: 可执行文件从用户AppData/Public/ProgramData运行",
       "confidence": 0.75,

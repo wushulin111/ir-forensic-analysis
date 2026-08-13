@@ -1,4 +1,19 @@
 ﻿# 变更记录
+## ir-forensic-analysis v4.4.0 (2026-08-13)
+**威胁情报多源扩展 - 全球平台对比分析**
+### 新增
+- `threat_intel_lookup.py` 新增 ThreatFox、MalwareBazaar（需免费 Auth-Key）、Pulsedive、Kaspersky OpenTIP、GreyNoise、Hybrid Analysis、URLScan.io 查询函数，支持 IP/域名/Hash 多源对比
+- 新增 `ip_query_order`、`domain_query_order`、`hash_query_order` 配置，按 IOC 类型分别控制查询顺序
+- 新增域名情报 Markdown 表格，补齐原先只展示 IP/Hash 的缺口
+- 报告新增“情报交叉分析说明”，自动列出本次参与比对的平台、覆盖类型、是否需要 Key 及本次状态
+- 国内厂商企业 API（奇安信、启明星辰、绿盟、360、腾讯、安恒、深信服、安天）配置后自动接入，不再提供人工复核入口
+- 新增环境变量 Key 配置，`TI_*` 环境变量可覆盖配置文件中的 Key，配置文件不再存放任何明文 Key
+- 命令行支持 `--ip`、`--domain`、`--hash`、`--raw` 单点查询
+### 文档
+- 新增 `references/THREAT_INTEL_PROVIDERS.md`，包含全球平台清单、配置步骤、新增平台方法
+- `references/SCRIPTS_GUIDE.md` 补充 `threat_intel_lookup.py` 说明
+### 注意
+- 发布到 GitHub 的版本必须保持 `config/threat_intel.json` 无真实 Key，统一使用 `YOUR_*_KEY_HERE` 或环境变量占位
 ## v5.3.3 (2026-08-12)
 **修复“不能对 Null 值表达式调用方法”弹窗与采集卡死**
 ### 修复

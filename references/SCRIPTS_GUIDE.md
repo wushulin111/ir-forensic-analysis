@@ -11,6 +11,9 @@
 | `extract_archive.py` | 解压取证文件 | `scripts/extract_archive.py` |
 | `analyze_forensics.py` | 主分析脚本 | `scripts/analyze_forensics.py` |
 | `rule_manager.py` | 规则库管理 | `scripts/rule_manager.py` |
+| `threat_intel_lookup.py` | 多源威胁情报查询 | `scripts/threat_intel_lookup.py` |
+
+> 威胁情报平台清单、API 配置与新增平台方法见 [THREAT_INTEL_PROVIDERS.md](THREAT_INTEL_PROVIDERS.md)。
 
 ---
 
