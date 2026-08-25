@@ -10,14 +10,14 @@
 |------|----------|--------------|----------|
 | 微步在线 X 情报社区 | IP/域名/Hash | 需要 | 已启用（配置中内置 Key） |
 | AlienVault OTX | IP/域名/Hash | 可选 | 已启用 |
-| URLhaus (abuse.ch) | IP/域名 | 不需要 | 已启用 |
-| VirusTotal | IP/Hash | 需要 | 已启用，未配置 Key |
+| URLhaus (abuse.ch) | IP/域名 | 需要免费 Auth-Key（2025年起） | 已启用，未配置 Key |
+| VirusTotal | IP/域名/Hash | 需要 | 已启用（本地已配置，发布版需自行配置） |
 | CVERC 国家计算机病毒协同分析平台 | Hash | 需要 | 已启用，未配置 Key |
 | AbuseIPDB | IP | 需要 | 已启用，未配置 Key |
 | IPinfo.io | IP 归属 | 不需要 | 已启用 |
 | ThreatFox (abuse.ch) | IP/域名/Hash | 需要免费 Auth-Key | 默认关闭，配置后启用 |
 | MalwareBazaar (abuse.ch) | Hash | 需要免费 Auth-Key | 默认关闭，配置后启用 |
-| Pulsedive | IP/域名/Hash | 可选（无 Key 限流更严） | 已启用 |
+| Pulsedive | IP/域名/Hash | 可选（无 Key 每天约 10 次） | 已启用 |
 | URLScan.io | 域名历史扫描 | 可选 | 已启用 |
 | Kaspersky OpenTIP | IP/域名/Hash | 需要 | 本地已启用，Token 到期由 `kaspersky_token_manager.py` 自动续期；发布版需自行配置 |
 | GreyNoise Community | IP | 需要免费 Key | 默认关闭，配置 Key 后启用 |
@@ -49,7 +49,7 @@
 | VirusTotal | https://www.virustotal.com/ | 有 API，免费版限速 | 已接入 |
 | AlienVault OTX | https://otx.alienvault.com/ | 有公开 API | 已接入 |
 | AbuseIPDB | https://www.abuseipdb.com/ | 有 API，免费版限次 | 已接入 |
-| URLhaus | https://urlhaus.abuse.ch/ | 有公开 API | 已接入 |
+| URLhaus | https://urlhaus.abuse.ch/ | 有 API，2025 年起需免费 Auth-Key | 已接入 |
 | MalwareBazaar | https://bazaar.abuse.ch/ | 有 API，需免费 Auth-Key | 已接入，待配置 |
 | ThreatFox | https://threatfox.abuse.ch/ | 有 API，需免费 Auth-Key | 已接入，待配置 |
 | Pulsedive | https://pulsedive.com/ | 有 API，免费 Key | 已接入 |
@@ -85,6 +85,7 @@
    - `TI_THREATBOOK_API_KEY`
    - `TI_VIRUSTOTAL_API_KEY`
    - `TI_OTX_API_KEY`
+   - `TI_URLHAUS_AUTH_KEY`
    - `TI_ABUSEIPDB_API_KEY`
    - `TI_CVERC_API_KEY`
    - `TI_PULSEDIVE_API_KEY`

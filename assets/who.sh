@@ -1,4 +1,8 @@
-#!/bin/bash
+#!/bin/sh
+# POSIX兼容的模式匹配函数
+_match() { case "$1" in $2) return 0 ;; *) return 1 ;; esac; }
+# POSIX兼容的 echo -e 替代
+echoe() { printf '%b\n' "$*"; }
 # ============================================================
 # Linux入侵检测报告工具 - Whoamicheck [司稽]
 # Author: Enomothem
@@ -20,7 +24,7 @@
 #   - v8.1.0: 新增供应链风险检测(第三方远程工具扫描/ESXi容器虚拟化环境检测)
 # ============================================================
 
-set -o pipefail
+set -o pipefail 2>/dev/null || true
 
 # --------------------------------------
 #        | 全局变量 |
@@ -38,6 +42,11 @@ OUTPUT_T="output/text"
 AUTHLOG_FILE="/var/log/auth.log"
 SECURE_FILE="/var/log/secure"
 IR_OUTPUT_DIR="/opt/ir_evidence"
+if ! mkdir -p "$IR_OUTPUT_DIR" 2>/dev/null; then
+    IR_OUTPUT_DIR="/tmp/ir_evidence"
+    mkdir -p "$IR_OUTPUT_DIR" 2>/dev/null || true
+fi
+chmod 700 "$IR_OUTPUT_DIR" 2>/dev/null || true
 IR_ARCHIVE="IR.tar.gz"
 
 # --------------------------------------
@@ -105,7 +114,7 @@ _get_auth_log() {
 #        | LOGO & HELP |
 # --------------------------------------
 
-function logo
+logo()
 {
     local hh="${_R}${_GREEN}<bug>${_R}${_RED}"
     local s="${_R}\e[1;31m777${_R}${_RED}"
@@ -120,7 +129,7 @@ function logo
     printf "       Hi ${WHOAMICHECK}          ${VER}          by \\Eonian Sharp\\ -${_BLUE} Enomothem${_R}\n"
 }
 
-function help_cn
+help_cn()
 {
     logo
     local W1=30 W2=55
@@ -158,7 +167,7 @@ function help_cn
 # --------------------------------------
 
 # 通用登录分析（适配 Debian/RedHat 日志格式）
-function fk_userlogin
+fk_userlogin()
 {
     _print_bar "用户登录分析"
 
@@ -177,21 +186,21 @@ function fk_userlogin
     printf "$_INFO 日志文件: $AUTH_LOG\n\n"
 
     # 登录成功
-    echo -e "${_BG_RED}\n『 登录成功记录 』${_R}\n"
+    echoe "${_BG_RED}\n『 登录成功记录 』${_R}\n"
     grep "Accepted" "$AUTH_LOG" | awk '{print "时间:"$1"-"$2"-"$3"\t"$9"@""$11"\t方式:"$7}' | tail -20
 
     # 暴力破解统计
-    echo -e "${_BG_RED}\n『 SSH暴力破解 - 攻击者IP TOP15 』${_R}\n"
+    echoe "${_BG_RED}\n『 SSH暴力破解 - 攻击者IP TOP15 』${_R}\n"
     grep "Failed password" "$AUTH_LOG" | grep -oP '\d+\.\d+\.\d+\.\d+' | sort | uniq -c | sort -rn | head -15 | \
         awk '{printf "  [%s] %s次  %s\n", ($1>100?"🔴":"🟡"), $1, $2}'
 
     # 被枚举的用户名
-    echo -e "${_BG_RED}\n『 被爆破用户名 TOP10 』${_R}\n"
+    echoe "${_BG_RED}\n『 被爆破用户名 TOP10 』${_R}\n"
     grep "Failed password for" "$AUTH_LOG" | grep -v "invalid" | awk '{print $9}' | sort | uniq -c | sort -rn | head -10 | \
         awk '{printf "  [+] 用户: %-15s 尝试: %s次\n", $2, $1}'
 
     # 不存在的用户名枚举
-    echo -e "${_BG_RED}\n『 枚举不存在的用户名 』${_R}\n"
+    echoe "${_BG_RED}\n『 枚举不存在的用户名 』${_R}\n"
     grep "Failed password for invalid user" "$AUTH_LOG" | awk '{print $11 " --> " $13}' | sort | uniq -c | sort -rn | head -10 | \
         awk '{printf "  [+] IP:%-18s 尝试用户: %s\n", $2, $3}'
 
@@ -202,7 +211,7 @@ function fk_userlogin
 #        | 基本信息 |
 # --------------------------------------
 
-function fk_baseinfo
+fk_baseinfo()
 {
     _print_bar "基本信息"
 
@@ -233,13 +242,13 @@ function fk_baseinfo
     printf "  %-18s ${_GREEN}%s${_R}\n" "采集时间" "$M_TIME"
 
     echo "------------------------------------------------------"
-    echo -e "${_RED}> 在线用户${_R}"
+    echoe "${_RED}> 在线用户${_R}"
     printf "%s\n" "$ONLINE"
     echo "------------------------------------------------------"
-    echo -e "${_RED}> 最近登录${_R}"
+    echoe "${_RED}> 最近登录${_R}"
     printf "%s\n" "$LAST"
     echo "------------------------------------------------------"
-    echo -e "${_RED}> 最后登录${_R}"
+    echoe "${_RED}> 最后登录${_R}"
     printf "%s\n" "$LASTLOG"
     echo "------------------------------------------------------"
 }
@@ -248,7 +257,7 @@ function fk_baseinfo
 #        | 系统状态 |
 # --------------------------------------
 
-function fk_devicestatus
+fk_devicestatus()
 {
     _print_bar "系统状态"
 
@@ -267,25 +276,25 @@ function fk_devicestatus
 #        | 进程与服务 |
 # --------------------------------------
 
-function fk_procserv
+fk_procserv()
 {
     _print_bar "进程与服务"
 
-    echo -e "${_RED}> 进程列表 (CPU TOP20)${_R}"
+    echoe "${_RED}> 进程列表 (CPU TOP20)${_R}"
     ps aux --sort=-%cpu 2>/dev/null | head -21
     echo
 
-    echo -e "${_RED}> 运行中的服务${_R}"
+    echoe "${_RED}> 运行中的服务${_R}"
     systemctl list-units --type=service --state=running 2>/dev/null | head -30
     echo
 
     # 检查已删除二进制的进程
-    echo -e "${_RED}> 已删除二进制的进程（可能残留或恶意）${_R}"
+    echoe "${_RED}> 已删除二进制的进程（可能残留或恶意）${_R}"
     local deleted=0
     for pid in /proc/[0-9]*; do
         local p=$(basename $pid)
         local exe_link=$(readlink /proc/$p/exe 2>/dev/null)
-        if [[ "$exe_link" == *"(deleted)"* ]]; then
+        if _match "$exe_link" '*deleted*'; then
             local cmd=$(cat /proc/$p/cmdline 2>/dev/null | tr '\0' ' ')
             printf "  ${_ORANGE}[!] PID:%-8s EXE:%s${_R}\n" "$p" "$exe_link"
             printf "      CMD: %s\n" "$cmd"
@@ -302,15 +311,15 @@ function fk_procserv
 #        | 端口信息 |
 # --------------------------------------
 
-function fk_portstatus
+fk_portstatus()
 {
     _print_bar "端口信息"
 
-    echo -e "${_RED}> 监听端口${_R}"
+    echoe "${_RED}> 监听端口${_R}"
     ss -tulpn 2>/dev/null | grep LISTEN || netstat -tlnp 2>/dev/null | grep LISTEN
     echo
 
-    echo -e "${_RED}> 已建立的外部连接${_R}"
+    echoe "${_RED}> 已建立的外部连接${_R}"
     ss -tnp 2>/dev/null | grep ESTAB | grep -v '127.0.0' | head -20
     echo
 }
@@ -319,15 +328,15 @@ function fk_portstatus
 #        | 历史命令 |
 # --------------------------------------
 
-function fk_history
+fk_history()
 {
     _print_bar "历史命令"
 
-    echo -e "${_RED}> 当前用户最近命令${_R}"
+    echoe "${_RED}> 当前用户最近命令${_R}"
     cat ~/.*sh_history 2>/dev/null | tail -20
     echo
 
-    echo -e "${_RED}> 所有用户历史文件${_R}"
+    echoe "${_RED}> 所有用户历史文件${_R}"
     find /home /root -name '.*sh_history' -exec echo "=== {} ===" \; -exec tail -5 {} \; 2>/dev/null
     echo
 }
@@ -336,33 +345,33 @@ function fk_history
 #        | 计划任务 |
 # --------------------------------------
 
-function fk_crontab
+fk_crontab()
 {
     _print_bar "计划任务"
 
-    echo -e "${_RED}> 当前用户 crontab${_R}"
+    echoe "${_RED}> 当前用户 crontab${_R}"
     crontab -l 2>/dev/null || echo "  (无)"
     echo
 
-    echo -e "${_RED}> /etc/crontab${_R}"
+    echoe "${_RED}> /etc/crontab${_R}"
     grep -vE '^\s*#|^\s*$' /etc/crontab 2>/dev/null || echo "  (空)"
     echo
 
-    echo -e "${_RED}> /etc/cron.d/${_R}"
+    echoe "${_RED}> /etc/cron.d/${_R}"
     ls -la /etc/cron.d/ 2>/dev/null
     for f in /etc/cron.d/*; do
         [ -f "$f" ] && echo "--- $f ---" && grep -vE '^\s*#|^\s*$' "$f" 2>/dev/null
     done
     echo
 
-    echo -e "${_RED}> /var/spool/cron/${_R}"
+    echoe "${_RED}> /var/spool/cron/${_R}"
     ls -laR /var/spool/cron/ 2>/dev/null
     for f in /var/spool/cron/crontabs/*; do
         [ -f "$f" ] && echo "--- $f ---" && grep -vE '^\s*#|^\s*$' "$f" 2>/dev/null
     done
     echo
 
-    echo -e "${_RED}> systemd timers${_R}"
+    echoe "${_RED}> systemd timers${_R}"
     systemctl list-timers --all 2>/dev/null | head -20
     echo
 }
@@ -371,32 +380,32 @@ function fk_crontab
 #        | 文件排查 |
 # --------------------------------------
 
-function fk_fileinfo
+fk_fileinfo()
 {
     _print_bar "文件排查"
 
     for dir in /home /opt /tmp /var/tmp /dev/shm; do
         if [ -d "$dir" ]; then
-            echo -e "${_RED}> $dir 目录内容${_R}"
+            echoe "${_RED}> $dir 目录内容${_R}"
             ls -la "$dir" 2>/dev/null | head -15
             echo
         fi
     done
 }
 
-function fk_filemove
+fk_filemove()
 {
     _print_bar "文件修改排查"
 
-    echo -e "${_RED}> 最近3天修改的文件（排除/proc /sys /dev）${_R}"
+    echoe "${_RED}> 最近3天修改的文件（排除/proc /sys /dev）${_R}"
     find / -type f -mtime -3 2>/dev/null | grep -vE '/proc|/sys|/dev|/run' | head -100
     echo
 
-    echo -e "${_RED}> /tmp /var/tmp /dev/shm 可执行文件${_R}"
+    echoe "${_RED}> /tmp /var/tmp /dev/shm 可执行文件${_R}"
     find /tmp /var/tmp /dev/shm -type f -executable 2>/dev/null || echo "  (无)"
     echo
 
-    echo -e "${_RED}> SSH PublicKey 状态${_R}"
+    echoe "${_RED}> SSH PublicKey 状态${_R}"
     find / -name authorized_keys -exec stat -c '%n 修改:%y 权限:%a' {} \; 2>/dev/null | grep -v '/proc'
     echo
 }
@@ -405,27 +414,27 @@ function fk_filemove
 #        | 用户信息 |
 # --------------------------------------
 
-function fk_userinfo
+fk_userinfo()
 {
     _print_bar "用户信息排查"
 
-    echo -e "${_RED}> UID=0 的用户（root权限）${_R}"
+    echoe "${_RED}> UID=0 的用户（root权限）${_R}"
     awk -F: '$3==0{print $1}' /etc/passwd
     echo
 
-    echo -e "${_RED}> /etc/passwd 最近10个用户${_R}"
+    echoe "${_RED}> /etc/passwd 最近10个用户${_R}"
     tail -10 /etc/passwd
     echo
 
-    echo -e "${_RED}> 有登录Shell的用户${_R}"
+    echoe "${_RED}> 有登录Shell的用户${_R}"
     grep -vE 'nologin|false|sync|halt|shutdown' /etc/passwd | cut -d: -f1,7
     echo
 
-    echo -e "${_RED}> sudo权限用户${_R}"
+    echoe "${_RED}> sudo权限用户${_R}"
     grep -vE '^#|^$' /etc/sudoers 2>/dev/null | grep "ALL=(ALL)" || echo "  (无法读取)"
     echo
 
-    echo -e "${_RED}> SSH授权密钥${_R}"
+    echoe "${_RED}> SSH授权密钥${_R}"
     find / -name authorized_keys -exec echo "=== {} ===" \; -exec cat {} \; 2>/dev/null | grep -v '/proc'
     echo
 
@@ -436,19 +445,19 @@ function fk_userinfo
 #        | Rootkit/SSH后门检测 |
 # --------------------------------------
 
-function fk_sshlink
+fk_sshlink()
 {
     _print_bar "Rootkit & SSH后门检测"
 
     # 1. 非标准端口的sshd
-    echo -e "${_RED}> 非标准端口 sshd 进程${_R}"
+    echoe "${_RED}> 非标准端口 sshd 进程${_R}"
     local found=0
     for pid in /proc/[0-9]*; do
         local p=$(basename $pid)
         local exe=$(readlink /proc/$p/exe 2>/dev/null)
-        if [[ "$exe" == */sshd ]]; then
+        if _match "$exe" '*/sshd'; then
             local cmdline=$(cat /proc/$p/cmdline 2>/dev/null | tr '\0' ' ')
-            if [[ "$cmdline" != *":22 "* ]] && [[ "$cmdline" != *" -p 22"* ]]; then
+            if ! _match "$cmdline" '*:22 *' && ! _match "$cmdline" '* -p 22*'; then
                 printf "  ${_ORANGE}[!] PID:%-8s EXE:%s CMD:%s${_R}\n" "$p" "$exe" "$cmdline"
                 found=$((found+1))
             fi
@@ -458,7 +467,7 @@ function fk_sshlink
     echo
 
     # 2. LD_PRELOAD 检查
-    echo -e "${_RED}> /etc/ld.so.preload${_R}"
+    echoe "${_RED}> /etc/ld.so.preload${_R}"
     if [ -f /etc/ld.so.preload ] && [ -s /etc/ld.so.preload ]; then
         printf "  ${_ORANGE}[!] 文件存在且非空！内容:${_R}\n"
         cat /etc/ld.so.preload
@@ -468,12 +477,12 @@ function fk_sshlink
     echo
 
     # 3. 可疑内核模块
-    echo -e "${_RED}> 最近加载的内核模块${_R}"
+    echoe "${_RED}> 最近加载的内核模块${_R}"
     lsmod 2>/dev/null | tail -10
     echo
 
     # 4. 异常 /proc/pid/exe（deleted/替换）
-    echo -e "${_RED}> 已删除或异常的可执行进程${_R}"
+    echoe "${_RED}> 已删除或异常的可执行进程${_R}"
     fk_procserv | grep -A2 "已删除"
     echo
 }
@@ -482,7 +491,7 @@ function fk_sshlink
 #        | Webshell检测 |
 # --------------------------------------
 
-function fk_wsfinder
+fk_wsfinder()
 {
     _print_bar "Webshell检测"
 
@@ -493,16 +502,16 @@ function fk_wsfinder
     local WEBSHELL_RULE_PHP_HIGH='\\b(assert|eval|system|exec|shell_exec|passthru|popen|proc_open|pcntl_exec)\\b[\\/*\\s]*\\(+[\\/*\\s]*((\\$_(GET|POST|REQUEST|COOKIE)\\[.{0,25})|(base64_decode|gzinflate|gzuncompress|gzdecode|str_rot13)[\\s\\(]*(\\$_(GET|POST|REQUEST|COOKIE)\\[.{0,25}))'
     local WEBSHELL_RULE_JSP='<%@\spage\simport=[\s\S]*\\u00\d+\\u00\d+|<%@\spage\simport=[\s\S]*Runtime.getRuntime\(\).exec\(request.getParameter\(|Runtime.getRuntime\('
 
-    local search_paths=()
+    local search_paths=""
     if [ -n "$WEBSHELL_PATH" ]; then
-        search_paths=("$WEBSHELL_PATH")
+        search_paths="$WEBSHELL_PATH"
     else
-        [ -d "/var/www" ] && search_paths+=("/var/www")
-        [ -d "/www/wwwroot" ] && search_paths+=("/www/wwwroot")
+        [ -d "/var/www" ] && search_paths="$search_paths /var/www"
+        [ -d "/www/wwwroot" ] && search_paths="$search_paths /www/wwwroot"
     fi
 
-    for wpath in "${search_paths[@]}"; do
-        echo -e "${_RED}> 扫描 $wpath${_R}"
+    for wpath in $search_paths; do
+        echoe "${_RED}> 扫描 $wpath${_R}"
 
         # PHP - 高置信度规则
         echo "  [高置信度] PHP危险函数+用户输入"
@@ -529,7 +538,7 @@ function fk_wsfinder
 #        | 内核漏洞检测 |
 # --------------------------------------
 
-function dirty_cow
+dirty_cow()
 {
     _print_bar "内核漏洞检测"
 
@@ -569,7 +578,7 @@ function dirty_cow
 
 # SUID/SGID 文件扫描
 _func_suid_sgid_scan() {
-    echo -e "${_RED}> SUID 文件 (潜在SUID Shell后门)${_R}"
+    echoe "${_RED}> SUID 文件 (潜在SUID Shell后门)${_R}"
     find / -perm -4000 -type f 2>/dev/null | while read f; do
         local sz=$(ls -l "$f" 2>/dev/null | awk '{print $5}')
         local mt=$(stat -c '%y' "$f" 2>/dev/null | cut -d. -f1)
@@ -588,14 +597,14 @@ _func_suid_sgid_scan() {
     done
     echo
 
-    echo -e "${_RED}> SGID 文件${_R}"
+    echoe "${_RED}> SGID 文件${_R}"
     find / -perm -2000 -type f 2>/dev/null | head -50
     echo
 }
 
 # Capabilities 后门检测
 _func_capabilities_scan() {
-    echo -e "${_RED}> 文件 Capabilities (提权能力)${_R}"
+    echoe "${_RED}> 文件 Capabilities (提权能力)${_R}"
     if command -v getcap >/dev/null 2>&1; then
         getcap -r / 2>/dev/null | while read line; do
             case "$line" in
@@ -615,16 +624,16 @@ _func_capabilities_scan() {
 
 # SSH软连接后门检测
 _func_ssh_softlink_backdoor() {
-    echo -e "${_RED}> SSH软连接后门检测${_R}"
+    echoe "${_RED}> SSH软连接后门检测${_R}"
     local found=0
     # 检查是否有sshd被软链接到可疑路径
     for pid in /proc/[0-9]*; do
         local p=$(basename $pid)
         local exe=$(readlink /proc/$p/exe 2>/dev/null)
         local cmdline=$(cat /proc/$p/cmdline 2>/dev/null | tr '\0' ' ')
-        if [[ "$exe" == */sshd ]] || [[ "$cmdline" == *sshd* ]]; then
+        if _match "$exe" '*/sshd' || _match "$cmdline" '*sshd*'; then
             # 检查是否监听在非标准端口且使用PAM软连接
-            if [[ "$cmdline" == *"/tmp/"* ]] || [[ "$cmdline" == *"/dev/shm/"* ]]; then
+            if _match "$cmdline" '*/tmp/*' || _match "$cmdline" '*/dev/shm/*'; then
                 printf "  ${_RED}[!] PID:%-8s 可疑软链接sshd: CMD:%s${_R}\n" "$p" "$cmdline"
                 found=$((found+1))
             fi
@@ -634,7 +643,7 @@ _func_ssh_softlink_backdoor() {
     for suspicious in /tmp/su /tmp/chsh /tmp/chfn /dev/shm/su; do
         if [ -L "$suspicious" ]; then
             local target=$(readlink "$suspicious")
-            if [[ "$target" == *sshd* ]]; then
+            if _match "$target" '*sshd*'; then
                 printf "  ${_RED}[!] 发现SSH软连接后门: %s -> %s${_R}\n" "$suspicious" "$target"
                 found=$((found+1))
             fi
@@ -654,7 +663,7 @@ _func_ssh_softlink_backdoor() {
 
 # OpenSSH后门检测
 _func_openssh_backdoor() {
-    echo -e "${_RED}> OpenSSH后门检测${_R}"
+    echoe "${_RED}> OpenSSH后门检测${_R}"
     local sshd_bin=$(which sshd 2>/dev/null || echo "/usr/sbin/sshd")
     local found=0
 
@@ -687,7 +696,7 @@ _func_openssh_backdoor() {
     fi
 
     # 2. 检查includes.h中的后门特征
-    echo -e "  ${_RED}> 检查OpenSSH后门特征文件${_R}"
+    echoe "  ${_RED}> 检查OpenSSH后门特征文件${_R}"
     for inc_dir in /usr/include/ /usr/local/include/; do
         if [ -f "${inc_dir}includes.h" ]; then
             if grep -q 'ILOG\|OLOG\|SECRETPW' "${inc_dir}includes.h" 2>/dev/null; then
@@ -712,7 +721,7 @@ _func_openssh_backdoor() {
 
 # PAM后门检测
 _func_pam_backdoor() {
-    echo -e "${_RED}> PAM后门检测${_R}"
+    echoe "${_RED}> PAM后门检测${_R}"
     local found=0
 
     # 1. 检查pam_unix.so修改时间
@@ -742,7 +751,7 @@ _func_pam_backdoor() {
     done
 
     # 2. 检查/etc/pam.d/ 下配置文件修改时间
-    echo -e "  ${_RED}> /etc/pam.d/ 配置文件修改时间${_R}"
+    echoe "  ${_RED}> /etc/pam.d/ 配置文件修改时间${_R}"
     for f in /etc/pam.d/*; do
         [ -f "$f" ] || continue
         local mtime=$(stat -c '%Y %y' "$f" 2>/dev/null)
@@ -761,7 +770,7 @@ _func_pam_backdoor() {
 
 # 命令替换检测（盖茨木马/RPM校验）
 _func_cmd_replace_check() {
-    echo -e "${_RED}> 关键系统命令完整性检查${_R}"
+    echoe "${_RED}> 关键系统命令完整性检查${_R}"
     local found=0
 
     # 检查关键命令大小是否异常
@@ -774,7 +783,7 @@ _func_cmd_replace_check() {
     echo
 
     # RPM check
-    echo -e "  ${_RED}> RPM/DPKG 全量校验${_R}"
+    echoe "  ${_RED}> RPM/DPKG 全量校验${_R}"
     if command -v rpm >/dev/null 2>&1; then
         local rpm_va=$(rpm -Va 2>/dev/null | grep -E '^..5' | head -30)
         if [ -n "$rpm_va" ]; then
@@ -799,7 +808,7 @@ _func_cmd_replace_check() {
     echo
 
     # 盖茨木马特征检测
-    echo -e "  ${_RED}> 盖茨木马特征检测${_R}"
+    echoe "  ${_RED}> 盖茨木马特征检测${_R}"
     local gates_found=0
     # 检查可疑启动项
     for rc_dir in /etc/rc.d/rc1.d /etc/rc.d/rc2.d /etc/rc.d/rc3.d /etc/rc.d/rc4.d /etc/rc.d/rc5.d; do
@@ -838,11 +847,11 @@ _func_cmd_replace_check() {
 
 # libprocesshider / 隐藏进程检测
 _func_hidden_process_check() {
-    echo -e "${_RED}> 隐藏进程检测 (libprocesshider/unhide)${_R}"
+    echoe "${_RED}> 隐藏进程检测 (libprocesshider/unhide)${_R}"
 
     # 已有ld.so.preload检测，增强：检查常见隐藏库
     if [ -f /etc/ld.so.preload ] && [ -s /etc/ld.so.preload ]; then
-        echo -e "  ${_ORANGE}[!] /etc/ld.so.preload 非空，内容:${_R}"
+        echoe "  ${_ORANGE}[!] /etc/ld.so.preload 非空，内容:${_R}"
         cat /etc/ld.so.preload | sed 's/^/    /'
         # 检查是否包含libprocesshider
         grep -qi 'processhider\|libprocesshider' /etc/ld.so.preload 2>/dev/null && \
@@ -851,9 +860,9 @@ _func_hidden_process_check() {
 
     # 使用unhide检测隐藏进程
     if command -v unhide >/dev/null 2>&1; then
-        echo -e "  ${_CYAN}[*] 使用 unhide 检测隐藏进程...${_R}"
+        echoe "  ${_CYAN}[*] 使用 unhide 检测隐藏进程...${_R}"
         unhide proc 2>/dev/null | head -30
-        echo -e "  ${_CYAN}[*] 使用 unhide 检测隐藏端口...${_R}"
+        echoe "  ${_CYAN}[*] 使用 unhide 检测隐藏端口...${_R}"
         unhide tcp 2>/dev/null | head -20
     else
         printf "  ${_WAR} unhide 未安装，建议安装: apt install unhide / yum install unhide${_R}\n"
@@ -862,7 +871,7 @@ _func_hidden_process_check() {
 }
 
 # 完整后门检测函数（交互式显示用）
-function fk_backdoor_check
+fk_backdoor_check()
 {
     _print_bar "后门检测（手册第3章）"
     _func_suid_sgid_scan
@@ -880,7 +889,7 @@ function fk_backdoor_check
 
 # sshd_config 安全审计
 _func_sshd_config_audit() {
-    echo -e "${_RED}> sshd_config 安全审计${_R}"
+    echoe "${_RED}> sshd_config 安全审计${_R}"
     local sshd_conf="/etc/ssh/sshd_config"
     if [ ! -f "$sshd_conf" ]; then
         printf "  ${_WAR} $sshd_conf 不存在${_R}\n"
@@ -914,7 +923,7 @@ _func_sshd_config_audit() {
 
 # authorized_keys 审计
 _func_authorized_keys_audit() {
-    echo -e "${_RED}> authorized_keys 审计${_R}"
+    echoe "${_RED}> authorized_keys 审计${_R}"
     find / -name authorized_keys -exec sh -c '
         f="$1"
         printf "  === %s ===\n" "$f"
@@ -927,7 +936,7 @@ _func_authorized_keys_audit() {
 
 # Shadow文件完整性
 _func_shadow_integrity() {
-    echo -e "${_RED}> Shadow文件完整性 - 空密码/弱密码账号${_R}"
+    echoe "${_RED}> Shadow文件完整性 - 空密码/弱密码账号${_R}"
     if [ -f /etc/shadow ] && [ -r /etc/shadow ]; then
         local empty=$(awk -F: '$2==""' /etc/shadow 2>/dev/null)
         local locked=$(awk -F: '$2=="!"||$2=="*"||$2=="!!"' /etc/shadow 2>/dev/null)
@@ -948,7 +957,7 @@ _func_shadow_integrity() {
 }
 
 # 认证增强（交互式显示用）
-function fk_auth_enhanced
+fk_auth_enhanced()
 {
     _print_bar "认证安全增强"
     _func_sshd_config_audit
@@ -961,13 +970,13 @@ function fk_auth_enhanced
 # --------------------------------------
 
 _func_anacron_check() {
-    echo -e "${_RED}> anacron 任务${_R}"
+    echoe "${_RED}> anacron 任务${_R}"
     if [ -f /etc/anacrontab ]; then
         grep -vE '^\s*#|^\s*$' /etc/anacrontab 2>/dev/null
     else
         echo "  /etc/anacrontab 不存在"
     fi
-    echo -e "  ${_RED}> /var/spool/anacron/${_R}"
+    echoe "  ${_RED}> /var/spool/anacron/${_R}"
     ls -la /var/spool/anacron/ 2>/dev/null || echo "  (不存在)"
     for f in /var/spool/anacron/*; do
         [ -f "$f" ] && echo "--- $f ---" && cat "$f" 2>/dev/null
@@ -976,7 +985,7 @@ _func_anacron_check() {
 }
 
 _func_xinetd_inetd_check() {
-    echo -e "${_RED}> xinetd 服务${_R}"
+    echoe "${_RED}> xinetd 服务${_R}"
     if [ -d /etc/xinetd.d ]; then
         ls -la /etc/xinetd.d/ 2>/dev/null
         for f in /etc/xinetd.d/*; do
@@ -985,7 +994,7 @@ _func_xinetd_inetd_check() {
     else
         echo "  /etc/xinetd.d/ 不存在"
     fi
-    echo -e "  ${_RED}> inetd 服务${_R}"
+    echoe "  ${_RED}> inetd 服务${_R}"
     if [ -f /etc/inetd.conf ]; then
         grep -vE '^\s*#|^\s*$' /etc/inetd.conf 2>/dev/null
     else
@@ -995,7 +1004,7 @@ _func_xinetd_inetd_check() {
 }
 
 _func_cron_full_check() {
-    echo -e "${_RED}> /var/spool/cron/ 全部用户crontab${_R}"
+    echoe "${_RED}> /var/spool/cron/ 全部用户crontab${_R}"
     for f in /var/spool/cron/*; do
         [ -f "$f" ] && echo "--- $f ---" && grep -vE '^\s*#|^\s*$' "$f" 2>/dev/null
     done
@@ -1004,11 +1013,11 @@ _func_cron_full_check() {
     done
     echo
 
-    echo -e "${_RED}> /etc/crontab${_R}"
+    echoe "${_RED}> /etc/crontab${_R}"
     grep -vE '^\s*#|^\s*$' /etc/crontab 2>/dev/null || echo "  (空)"
     echo
 
-    echo -e "${_RED}> /etc/cron.d/${_R}"
+    echoe "${_RED}> /etc/cron.d/${_R}"
     for f in /etc/cron.d/*; do
         [ -f "$f" ] && echo "--- $f ---" && grep -vE '^\s*#|^\s*$' "$f" 2>/dev/null
     done
@@ -1017,7 +1026,7 @@ _func_cron_full_check() {
     for period in daily hourly monthly weekly; do
         local dir="/etc/cron.${period}"
         if [ -d "$dir" ]; then
-            echo -e "${_RED}> $dir/${_R}"
+            echoe "${_RED}> $dir/${_R}"
             for f in "$dir"/*; do
                 [ -f "$f" ] && echo "--- $f ---" && grep -vE '^\s*#|^\s*$' "$f" 2>/dev/null
             done
@@ -1027,7 +1036,7 @@ _func_cron_full_check() {
 }
 
 # 服务与启动项补全（交互式显示用）
-function fk_service_startup_enhanced
+fk_service_startup_enhanced()
 {
     _print_bar "服务与启动项（补全）"
     _func_anacron_check
@@ -1041,25 +1050,25 @@ function fk_service_startup_enhanced
 
 # Web日志异常提取
 _func_web_log_analysis() {
-    echo -e "${_RED}> Web日志异常提取${_R}"
+    echoe "${_RED}> Web日志异常提取${_R}"
 
-    local web_logs=()
+    local web_logs=""
     # nginx
     for f in /var/log/nginx/access.log /var/log/nginx/access.log.1; do
-        [ -f "$f" ] && web_logs+=("$f")
+        [ -f "$f" ] && web_logs="$web_logs $f"
     done
     # apache
     for f in /var/log/apache2/access.log /var/log/httpd/access_log /var/log/apache2/access.log.1; do
-        [ -f "$f" ] && web_logs+=("$f")
+        [ -f "$f" ] && web_logs="$web_logs $f"
     done
 
-    if [ ${#web_logs[@]} -eq 0 ]; then
+    if [ -z "$(echo "$web_logs" | tr -d ' ')" ]; then
         printf "  ${_WAR} 未找到Web访问日志${_R}\n"
         return
     fi
 
-    for logf in "${web_logs[@]}"; do
-        echo -e "  ${_CYAN}[*] 分析: $logf${_R}"
+    for logf in $web_logs; do
+        echoe "  ${_CYAN}[*] 分析: $logf${_R}"
 
         # Top IP
         echo "  [Top 10 源IP]"
@@ -1085,10 +1094,10 @@ _func_web_log_analysis() {
 
 # 数据库日志检查
 _func_db_log_check() {
-    echo -e "${_RED}> 数据库日志检查${_R}"
+    echoe "${_RED}> 数据库日志检查${_R}"
 
     # MySQL
-    echo -e "  ${_CYAN}[*] MySQL${_R}"
+    echoe "  ${_CYAN}[*] MySQL${_R}"
     local mysql_conf="/etc/mysql/my.cnf /etc/my.cnf"
     for cf in $mysql_conf; do
         if [ -f "$cf" ]; then
@@ -1105,7 +1114,7 @@ _func_db_log_check() {
     done
 
     # PostgreSQL
-    echo -e "  ${_CYAN}[*] PostgreSQL${_R}"
+    echoe "  ${_CYAN}[*] PostgreSQL${_R}"
     for pg_log_dir in /var/log/postgresql/ /var/lib/pgsql/data/log/; do
         if [ -d "$pg_log_dir" ]; then
             echo "  日志目录: $pg_log_dir"
@@ -1117,7 +1126,7 @@ _func_db_log_check() {
 
 # lastb 暴力破解统计
 _func_lastb_bruteforce() {
-    echo -e "${_RED}> lastb 暴力破解统计（失败登录源IP TOP20）${_R}"
+    echoe "${_RED}> lastb 暴力破解统计（失败登录源IP TOP20）${_R}"
     if command -v lastb >/dev/null 2>&1; then
         lastb 2>/dev/null | grep -oP '\d+\.\d+\.\d+\.\d+' | sort | uniq -c | sort -rn | head -20 | \
             awk '{printf "  [%s] %-18s %s次\n", ($1>100?"🔴":"🟡"), $2, $1}'
@@ -1128,7 +1137,7 @@ _func_lastb_bruteforce() {
 }
 
 # 日志分析增强（交互式显示用）
-function fk_log_analysis_enhanced
+fk_log_analysis_enhanced()
 {
     _print_bar "日志分析增强"
     _func_web_log_analysis
@@ -1142,7 +1151,7 @@ function fk_log_analysis_enhanced
 
 # 最近修改的系统文件
 _func_recent_system_files() {
-    echo -e "${_RED}> 最近3天修改的系统文件 (/etc /usr/bin /usr/sbin)${_R}"
+    echoe "${_RED}> 最近3天修改的系统文件 (/etc /usr/bin /usr/sbin)${_R}"
     find /etc /usr/bin /usr/sbin -mtime -3 -type f 2>/dev/null | while read f; do
         local mt=$(stat -c '%y' "$f" 2>/dev/null | cut -d. -f1)
         printf "  %s  %s\n" "$mt" "$f"
@@ -1152,7 +1161,7 @@ _func_recent_system_files() {
 
 # /tmp 和 /dev/shm 下的可执行文件（含hash）
 _func_tmp_shm_executables() {
-    echo -e "${_RED}> /tmp /var/tmp /dev/shm 可执行文件（含hash）${_R}"
+    echoe "${_RED}> /tmp /var/tmp /dev/shm 可执行文件（含hash）${_R}"
     find /tmp /var/tmp /dev/shm -type f -executable 2>/dev/null | while read f; do
         local sz=$(ls -lh "$f" 2>/dev/null | awk '{print $5}')
         local mt=$(stat -c '%y' "$f" 2>/dev/null | cut -d. -f1)
@@ -1168,7 +1177,7 @@ _func_tmp_shm_executables() {
 }
 
 # 文件系统增强（交互式显示用）
-function fk_filesystem_enhanced
+fk_filesystem_enhanced()
 {
     _print_bar "文件系统增强"
     _func_recent_system_files
@@ -1179,16 +1188,17 @@ function fk_filesystem_enhanced
 #        | IR 全量取证收集 |
 # --------------------------------------
 
-function fk_ir_collect
+fk_ir_collect()
 {
     local COLLECT_DIR="$1"
+    mkdir -p "$COLLECT_DIR/1_volatile" "$COLLECT_DIR/2_accounts" "$COLLECT_DIR/3_persistence" "$COLLECT_DIR/4_backdoor" "$COLLECT_DIR/5_system" "$COLLECT_DIR/6_logs" "$COLLECT_DIR/7_filesystem" "$COLLECT_DIR/whoamicheck"
     _IR_LOG="$COLLECT_DIR/collection.log"
 
     echo "[=== 取证收集开始 $(date) ===]" | tee -a "$_IR_LOG"
     echo "主机: $(hostname) | 内核: $(uname -r) | 收集者: $(whoami)" >> "$_IR_LOG"
 
     # ===== 1. 网络（最易失） =====
-    echo -e "${_CYAN}[1/9] 收集网络连接信息（最易失）...${_R}"
+    echoe "${_CYAN}[1/9] 收集网络连接信息（最易失）...${_R}"
     _ir_run "netstat" "netstat -antulp" "$COLLECT_DIR/1_volatile/netstat.txt"
     _ir_run "ss" "ss -antulp" "$COLLECT_DIR/1_volatile/ss.txt"
     _ir_run "arp" "arp -a" "$COLLECT_DIR/1_volatile/arp.txt"
@@ -1198,13 +1208,13 @@ function fk_ir_collect
     _ir_run "iptables" "iptables -L -n -v 2>/dev/null" "$COLLECT_DIR/1_volatile/iptables.txt"
 
     # ===== 2. 进程（高易失） =====
-    echo -e "${_CYAN}[2/9] 收集进程信息（高易失）...${_R}"
+    echoe "${_CYAN}[2/9] 收集进程信息（高易失）...${_R}"
     _ir_run "ps_aux" "ps auxww" "$COLLECT_DIR/1_volatile/processes.txt"
     _ir_run "ps_ef" "ps -ef" "$COLLECT_DIR/1_volatile/ps_ef.txt"
     _ir_run "lsof" "lsof +c 15 2>/dev/null" "$COLLECT_DIR/1_volatile/lsof.txt"
     _ir_run "top" "top -bn1" "$COLLECT_DIR/1_volatile/top.txt"
 
-    echo -e "${_CYAN}  深度采集 /proc ...${_R}"
+    echoe "${_CYAN}  深度采集 /proc ...${_R}"
     > "$COLLECT_DIR/1_volatile/proc_exe_links.txt"
     > "$COLLECT_DIR/1_volatile/proc_maps.txt"
     > "$COLLECT_DIR/1_volatile/proc_environ.txt"
@@ -1227,7 +1237,7 @@ function fk_ir_collect
     done
 
     # ===== 3. 账号 =====
-    echo -e "${_CYAN}[3/9] 收集账号信息...${_R}"
+    echoe "${_CYAN}[3/9] 收集账号信息...${_R}"
     _ir_run "passwd" "cat /etc/passwd" "$COLLECT_DIR/2_accounts/passwd.txt"
     _ir_run "shadow" "cat /etc/shadow 2>/dev/null" "$COLLECT_DIR/2_accounts/shadow.txt"
     _ir_run "group" "cat /etc/group" "$COLLECT_DIR/2_accounts/group.txt"
@@ -1242,7 +1252,7 @@ function fk_ir_collect
     _ir_run "lastb" "lastb 2>/dev/null | head -200" "$COLLECT_DIR/2_accounts/lastb.txt"
 
     # ===== 4. 持久化 =====
-    echo -e "${_CYAN}[4/9] 收集持久化机制...${_R}"
+    echoe "${_CYAN}[4/9] 收集持久化机制...${_R}"
     _ir_run "crontab_root" "crontab -l 2>/dev/null" "$COLLECT_DIR/3_persistence/crontab_root.txt"
     _ir_run "crontab_system" "cat /etc/crontab" "$COLLECT_DIR/3_persistence/crontab_system.txt"
     _ir_run "cron_d" "ls -la /etc/cron.d/ 2>/dev/null && cat /etc/cron.d/* 2>/dev/null" "$COLLECT_DIR/3_persistence/cron_d.txt"
@@ -1266,7 +1276,7 @@ function fk_ir_collect
     _ir_run "systemd_timers" "systemctl list-timers --all 2>/dev/null" "$COLLECT_DIR/3_persistence/systemd_timers.txt"
 
     # ===== 4b. 持久化增强项（v8.1+ 新增） =====
-    echo -e "${_CYAN}  持久化增强检测（v8.1+）...${_R}"
+    echoe "${_CYAN}  持久化增强检测（v8.1+）...${_R}"
 
     # 用户级 bashrc/profile 劫持
     _ir_run "bashrc_profile" \
@@ -1295,7 +1305,7 @@ function fk_ir_collect
 
 
     # ===== 5. 系统 =====
-    echo -e "${_CYAN}[5/9] 收集系统信息...${_R}"
+    echoe "${_CYAN}[5/9] 收集系统信息...${_R}"
     _ir_run "system_info" "uname -a && hostname && cat /etc/os-release && date && uptime" "$COLLECT_DIR/5_system/system_info.txt"
     _ir_run "dmesg" "dmesg 2>/dev/null | tail -100" "$COLLECT_DIR/5_system/dmesg.txt"
     _ir_run "mount" "mount" "$COLLECT_DIR/5_system/mount.txt"
@@ -1305,7 +1315,7 @@ function fk_ir_collect
     _ir_run "kube_pods" "kubectl get pods -A 2>/dev/null" "$COLLECT_DIR/5_system/kube_pods.txt"
 
     # ===== 6. 文件/权限 =====
-    echo -e "${_CYAN}[6/9] 收集文件与权限信息...${_R}"
+    echoe "${_CYAN}[6/9] 收集文件与权限信息...${_R}"
     _ir_run "suid" "find / -perm -4000 -type f 2>/dev/null" "$COLLECT_DIR/4_backdoor/suid_files.txt"
     _ir_run "sgid" "find / -perm -2000 -type f 2>/dev/null" "$COLLECT_DIR/4_backdoor/sgid_files.txt"
     _ir_run "world_writable" "find / -perm -o+w -type f 2>/dev/null | head -500" "$COLLECT_DIR/7_filesystem/world_writable.txt"
@@ -1324,7 +1334,7 @@ function fk_ir_collect
     _ir_run "pam_integrity" "stat /lib64/security/pam_unix.so /lib/security/pam_unix.so 2>/dev/null; rpm -V pam 2>/dev/null; dpkg -V libpam-modules 2>/dev/null" "$COLLECT_DIR/4_backdoor/pam_integrity.txt"
 
     # ===== 7. Web/日志 =====
-    echo -e "${_CYAN}[7/9] 收集Web与日志信息...${_R}"
+    echoe "${_CYAN}[7/9] 收集Web与日志信息...${_R}"
     _ir_run "web_dirs" "ls -laR /var/www/ 2>/dev/null | head -500" "$COLLECT_DIR/6_logs/web_directory.txt"
     _ir_run "web_wwwroot" "ls -laR /www/wwwroot/ 2>/dev/null | head -500" "$COLLECT_DIR/6_logs/web_wwwroot.txt"
     _ir_run "nginx_conf" "cat /etc/nginx/nginx.conf 2>/dev/null" "$COLLECT_DIR/6_logs/nginx_conf.txt"
@@ -1349,7 +1359,7 @@ function fk_ir_collect
 
 
     # ===== 9. 勒索病毒 + 供应链风险检测（v3.0-switch 新增） =====
-    echo -e "${_CYAN}[9/9] 勒索病毒与供应链风险检测...${_R}"
+    echoe "${_CYAN}[9/9] 勒索病毒与供应链风险检测...${_R}"
 
     # 勒索信文件搜索
     _ir_run "ransom_notes" \
@@ -1385,7 +1395,7 @@ function fk_ir_collect
       "$COLLECT_DIR/5_system/virtualization_check.txt"
 
     # ===== 8. 合并原有输出 =====
-    echo -e "${_CYAN}[8/9] 合并原有检测结果...${_R}"
+    echoe "${_CYAN}[8/9] 合并原有检测结果...${_R}"
     if [ -d "$OUTPUT" ]; then
         cp -r "$OUTPUT"/* "$COLLECT_DIR/whoamicheck/" 2>/dev/null
     fi
@@ -1397,7 +1407,7 @@ function fk_ir_collect
 #        | IR 打包 |
 # --------------------------------------
 
-function fk_irpack
+fk_irpack()
 {
     _print_bar "IR证据打包"
 
@@ -1412,9 +1422,9 @@ function fk_irpack
     local ARCHIVE_PATH="$IR_OUTPUT_DIR/$IR_ARCHIVE"
 
     echo "正在创建IR证据目录: $IR_COLLECT_DIR"
-    mkdir -p "$IR_COLLECT_DIR"/{1_volatile,2_accounts,3_persistence,4_backdoor,5_system,6_logs,7_filesystem,whoamicheck}
+    mkdir -p "$IR_COLLECT_DIR/1_volatile" "$IR_COLLECT_DIR/2_accounts" "$IR_COLLECT_DIR/3_persistence" "$IR_COLLECT_DIR/4_backdoor" "$IR_COLLECT_DIR/5_system" "$IR_COLLECT_DIR/6_logs" "$IR_COLLECT_DIR/7_filesystem" "$IR_COLLECT_DIR/whoamicheck"
 
-    echo -e "${_YELLOW}正在执行全量取证收集（按挥发性排序）...${_R}"
+    echoe "${_YELLOW}正在执行全量取证收集（按挥发性排序）...${_R}"
     fk_ir_collect "$IR_COLLECT_DIR"
 
     # 打包
@@ -1474,7 +1484,7 @@ METADATA
 #        | 主入口 |
 # --------------------------------------
 
-function main
+main()
 {
     if [ $# -eq 0 ]; then
         help_cn

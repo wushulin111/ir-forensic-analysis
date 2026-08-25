@@ -1,4 +1,19 @@
 # 变更记录
+## ir-forensic-analysis v4.5.3 (2026-08-25)
+**威胁情报增强 + who.sh POSIX 兼容修复**
+### 威胁情报
+- 新增 VirusTotal 域名查询，VT 覆盖 IP/域名/Hash；域名查询顺序加入 VirusTotal
+- URLhaus 2025 年起查询需免费 Auth-Key，脚本、配置、文档同步更新
+- 修正“情报交叉分析说明”状态：区分 已自动比对/未配置Key/查询失败/未收录，错误 Key 命名统一
+- Pulsedive 未收录按 `not_found` 处理，不再误报为查询失败；本地配置 Pulsedive / Hybrid Analysis Key
+- 修复 URLhaus 401、VT/Hybrid 错误状态映射、VT IP 总引擎数显示
+### who.sh（Linux 采集）
+- `#!/bin/bash` → `#!/bin/sh`，23 处 `function` 改为 POSIX `name()`
+- 新增 `_match()` / `echoe()`，替换 `[[ ]]` 与 `echo -e`，兼容 dash / busybox / bash
+- `set -o pipefail` 增加保护，dash 下不再报错
+- 输出目录 `/opt/ir_evidence` 优先，不可写时回退 `/tmp/ir_evidence`，并 `chmod 700`
+- 命名恢复 `whoamicheck`，保持与旧取证包目录兼容
+
 ## ir-forensic-analysis v4.5.2 (2026-08-13)
 **奇安信失陷检测情报接入（REST API）**
 ### 新增

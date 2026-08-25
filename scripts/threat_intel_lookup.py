@@ -140,13 +140,53 @@ def query_vt_ip(ip: str, api_key: str) -> dict:
                 "source": "VirusTotal",
                 "stats": stats,
                 "malicious_count": stats.get("malicious", 0),
+                "total_engines": sum(stats.values()),
                 "country": attrs.get("country", ""),
                 "asn": attrs.get("asn", ""),
                 "as_owner": attrs.get("as_owner", "")
             }
-        return {"error": "VT未收录该IP"}
+        return {"not_found": True, "error": "VT未收录该IP"}
     except Exception as e:
         return {"error": f"VT IP查询异常: {str(e)}"}
+
+
+def query_vt_domain(domain: str, api_key: str) -> dict:
+    """VirusTotal 域名查询"""
+    if not api_key:
+        return {"error": "VT API Key 未配置"}
+    try:
+        r = requests.get(
+            f"https://www.virustotal.com/api/v3/domains/{domain}",
+            headers={"x-apikey": api_key},
+            timeout=15
+        )
+        data = r.json()
+        if "data" in data:
+            attrs = data["data"]["attributes"]
+            stats = attrs.get("last_analysis_stats", {})
+            results = attrs.get("last_analysis_results", {})
+            malicious_engines = []
+            for eng, res in results.items():
+                if res.get("category") == "malicious":
+                    malicious_engines.append(f"{eng}: {res.get('result', 'malicious')}")
+            return {
+                "source": "VirusTotal",
+                "stats": stats,
+                "malicious_count": stats.get("malicious", 0),
+                "total_engines": sum(stats.values()),
+                "malicious_engines": malicious_engines[:10],
+                "reputation": attrs.get("reputation", 0),
+                "tags": attrs.get("tags", [])[:10],
+                "registrar": attrs.get("registrar", ""),
+                "creation_date": attrs.get("creation_date", ""),
+                "last_dns_records": [
+                    {"type": d.get("type", ""), "value": d.get("value", "")}
+                    for d in (attrs.get("last_dns_records") or [])[:5]
+                ]
+            }
+        return {"not_found": True, "error": "VT未收录该域名"}
+    except Exception as e:
+        return {"error": f"VT域名查询异常: {str(e)}"}
 
 
 def query_qianxin_compromise(value: str, api_key: str) -> dict:
@@ -295,16 +335,32 @@ def query_otx_hash(file_hash: str, api_key: str = "") -> dict:
         return {"error": f"OTX Hash查询异常: {str(e)}"}
 
 
-def query_urlhaus_host(host: str) -> dict:
-    """URLhaus 查询某IP/域名历史上分发过的恶意URL"""
+def query_urlhaus_host(host: str, api_key: str = "") -> dict:
+    """URLhaus 查询某IP/域名历史上分发过的恶意URL（2025年起查询需免费Auth-Key）"""
+    if not api_key:
+        return {"not_configured": True, "error": "URLhaus API Key 未配置，需在 abuse.ch 免费注册 Auth-Key"}
     try:
+        headers = {"Auth-Key": api_key}
         r = requests.post(
             "https://urlhaus-api.abuse.ch/v1/host/",
             data={"host": host},
+            headers=headers,
             timeout=10
         )
         data = r.json()
+        if r.status_code == 401:
+            return {"error": "URLhaus API Key 无效或未授权"}
         if data.get("query_status") != "ok":
+            if data.get("query_status") == "no_results":
+                return {
+                    "source": "URLhaus",
+                    "url_count": 0,
+                    "threat_types": [],
+                    "threat_str": "",
+                    "tags": [],
+                    "first_seen": "",
+                    "recent_samples": 0
+                }
             return {"error": data.get("query_status", "unknown")}
         urls = data.get("urls", [])
         threats = set()
@@ -462,7 +518,10 @@ def query_pulsedive(value: str, api_key: str = "") -> dict:
         r = requests.get("https://pulsedive.com/api/indicator.php", params=params, timeout=8)
         data = r.json()
         if isinstance(data, dict) and data.get("error"):
-            return {"error": data.get("error")}
+            err = data.get("error", "")
+            if "not found" in err.lower() or "no results" in err.lower():
+                return {"not_found": True, "error": err}
+            return {"error": err}
         if not isinstance(data, dict):
             return {"error": "Pulsedive返回格式异常"}
         return {
@@ -674,17 +733,25 @@ def multi_source_query_ip(ip: str, config: dict) -> dict:
             r = query_otx_ip(ip, api_key)
             if "error" not in r:
                 results["OTX"] = r
+            else:
+                results["OTX_error"] = r.get("error", "")
         elif source_name == "URLhaus":
-            r = query_urlhaus_host(ip)
+            r = query_urlhaus_host(ip, api_key)
             if "error" not in r:
                 results["URLhaus"] = r
+            else:
+                results["URLhaus_error"] = r.get("error", "")
         elif source_name == "VirusTotal":
             if not api_key:
-                results["VT_error"] = "未配置Key"
+                results["VirusTotal_error"] = "未配置Key"
                 continue
             r = query_vt_ip(ip, api_key)
-            if "error" not in r:
+            if r.get("not_found"):
                 results["VirusTotal"] = r
+            elif "error" not in r:
+                results["VirusTotal"] = r
+            else:
+                results["VirusTotal_error"] = r.get("error", "")
         elif source_name == "AbuseIPDB":
             if not api_key:
                 results["AbuseIPDB_error"] = "未配置Key"
@@ -692,6 +759,8 @@ def multi_source_query_ip(ip: str, config: dict) -> dict:
             r = query_abuseipdb(ip, api_key)
             if "error" not in r:
                 results["AbuseIPDB"] = r
+            else:
+                results["AbuseIPDB_error"] = r.get("error", "")
         elif source_name == "GreyNoise":
             r = query_greynoise_ip(ip, api_key)
             if "error" not in r:
@@ -700,11 +769,17 @@ def multi_source_query_ip(ip: str, config: dict) -> dict:
                 results["GreyNoise_error"] = r.get("error", "")
         elif source_name == "Pulsedive":
             r = query_pulsedive(ip, api_key)
-            if "error" not in r:
+            if r.get("not_found"):
                 results["Pulsedive"] = r
+            elif "error" not in r:
+                results["Pulsedive"] = r
+            else:
+                results["Pulsedive_error"] = r.get("error", "")
         elif source_name == "Kaspersky OpenTIP":
             r = query_kaspersky(ip, _get_kaspersky_api_key(config, source), "ip")
-            if "error" not in r:
+            if r.get("not_found"):
+                results["Kaspersky"] = r
+            elif "error" not in r:
                 results["Kaspersky"] = r
             else:
                 results["Kaspersky_error"] = r.get("error", "")
@@ -712,6 +787,8 @@ def multi_source_query_ip(ip: str, config: dict) -> dict:
             r = query_threatfox(ip, api_key)
             if "error" not in r:
                 results["ThreatFox"] = r
+            else:
+                results["ThreatFox_error"] = r.get("error", "")
     # 补充IPinfo基础信息（最后补充，不阻断）
     results["IPinfo"] = query_ipinfo(ip)
     return results
@@ -742,21 +819,42 @@ def multi_source_query_domain(domain: str, config: dict) -> dict:
             r = query_otx_domain(domain, api_key)
             if "error" not in r:
                 results["OTX"] = r
+            else:
+                results["OTX_error"] = r.get("error", "")
         elif source_name == "URLhaus":
-            r = query_urlhaus_host(domain)
+            r = query_urlhaus_host(domain, api_key)
             if "error" not in r:
                 results["URLhaus"] = r
+            else:
+                results["URLhaus_error"] = r.get("error", "")
+        elif source_name == "VirusTotal":
+            if not api_key:
+                results["VirusTotal_error"] = "未配置Key"
+                continue
+            r = query_vt_domain(domain, api_key)
+            if r.get("not_found"):
+                results["VirusTotal"] = r
+            elif "error" not in r:
+                results["VirusTotal"] = r
+            else:
+                results["VirusTotal_error"] = r.get("error", "")
         elif source_name == "URLScan.io":
             r = query_urlscan_domain(domain, api_key)
             if "error" not in r:
                 results["URLScan.io"] = r
         elif source_name == "Pulsedive":
             r = query_pulsedive(domain, api_key)
-            if "error" not in r:
+            if r.get("not_found"):
                 results["Pulsedive"] = r
+            elif "error" not in r:
+                results["Pulsedive"] = r
+            else:
+                results["Pulsedive_error"] = r.get("error", "")
         elif source_name == "Kaspersky OpenTIP":
             r = query_kaspersky(domain, _get_kaspersky_api_key(config, source), "domain")
-            if "error" not in r:
+            if r.get("not_found"):
+                results["Kaspersky"] = r
+            elif "error" not in r:
                 results["Kaspersky"] = r
             else:
                 results["Kaspersky_error"] = r.get("error", "")
@@ -764,6 +862,8 @@ def multi_source_query_domain(domain: str, config: dict) -> dict:
             r = query_threatfox(domain, api_key)
             if "error" not in r:
                 results["ThreatFox"] = r
+            else:
+                results["ThreatFox_error"] = r.get("error", "")
     return results
 
 
@@ -780,16 +880,22 @@ def multi_source_query_hash(file_hash: str, config: dict) -> dict:
             r = query_threatbook_hash(file_hash, api_key)
             if "error" not in r:
                 results["微步"] = r
+            else:
+                results["微步_error"] = r.get("error", "")
         elif source_name == "AlienVault OTX":
             r = query_otx_hash(file_hash, api_key)
             if "error" not in r:
                 results["OTX"] = r
+            else:
+                results["OTX_error"] = r.get("error", "")
         elif source_name == "VirusTotal":
             r = query_vt_hash(file_hash, api_key)
-            if "error" not in r:
+            if r.get("not_found"):
                 results["VirusTotal"] = r
-                if r.get("not_found"):
-                    continue
+            elif "error" not in r:
+                results["VirusTotal"] = r
+            else:
+                results["VirusTotal_error"] = r.get("error", "")
         elif source_name == "CVERC国家计算机病毒协同分析平台":
             if not api_key:
                 results["CVERC_error"] = "未配置Key"
@@ -801,26 +907,38 @@ def multi_source_query_hash(file_hash: str, config: dict) -> dict:
             r = query_malwarebazaar_hash(file_hash, api_key)
             if "error" not in r:
                 results["MalwareBazaar"] = r
+            else:
+                results["MalwareBazaar_error"] = r.get("error", "")
         elif source_name == "ThreatFox":
             r = query_threatfox(file_hash, api_key)
             if "error" not in r:
                 results["ThreatFox"] = r
+            else:
+                results["ThreatFox_error"] = r.get("error", "")
         elif source_name == "Kaspersky OpenTIP":
             r = query_kaspersky(file_hash, _get_kaspersky_api_key(config, source), "hash")
-            if "error" not in r:
+            if r.get("not_found"):
+                results["Kaspersky"] = r
+            elif "error" not in r:
                 results["Kaspersky"] = r
             else:
                 results["Kaspersky_error"] = r.get("error", "")
         elif source_name == "Pulsedive":
             r = query_pulsedive(file_hash, api_key)
-            if "error" not in r:
+            if r.get("not_found"):
                 results["Pulsedive"] = r
+            elif "error" not in r:
+                results["Pulsedive"] = r
+            else:
+                results["Pulsedive_error"] = r.get("error", "")
         elif source_name == "Hybrid Analysis":
             r = query_hybrid_hash(file_hash, api_key)
-            if "error" not in r:
+            if r.get("not_found"):
+                results["Hybrid Analysis"] = r
+            elif "error" not in r:
                 results["Hybrid Analysis"] = r
             else:
-                results["Hybrid_error"] = r.get("error", "")
+                results["Hybrid Analysis_error"] = r.get("error", "")
     return results
 
 
@@ -914,17 +1032,26 @@ def _cross_analysis_summary(results: dict, config: dict) -> str:
         key_need = "是" if key_required else "否"
         has_key = bool(source.get("api_key", ""))
         found = False
+        error_hit = False
         for ioc_type in ioc_types:
             for item in results.get(ioc_type, {}).values():
+                err_key = f"{result_key}_error"
+                if err_key in item:
+                    error_hit = True
                 if result_key in item:
-                    found = True
-                    break
-            if found:
+                    val = item[result_key]
+                    if isinstance(val, dict) and val.get("error") and not val.get("not_found"):
+                        error_hit = True
+                    else:
+                        found = True
+            if found or error_hit:
                 break
         if found:
             status = "已自动比对"
         elif key_required and not has_key:
             status = "未配置Key，已跳过"
+        elif error_hit:
+            status = "查询失败/无权限"
         else:
             status = "已查询，无匹配记录"
         lines.append(f"| {name} | {ioc_types_str or '-'} | {key_need} | {status} |")
@@ -968,8 +1095,8 @@ def format_threat_intel(results: dict, config: dict = None) -> str:
     # 域名查询结果
     domain_results = results.get("domains", {})
     if domain_results:
-        md += "\n### 域名情报\n\n| 域名 | 微步 | 奇安信 | OTX | URLhaus | URLScan | Pulsedive | Kaspersky | ThreatFox |\n"
-        md += "|------|------|--------|-----|---------|---------|-----------|-----------|-----------|\n"
+        md += "\n### 域名情报\n\n| 域名 | 微步 | 奇安信 | OTX | URLhaus | VT | URLScan | Pulsedive | Kaspersky | ThreatFox |\n"
+        md += "|------|------|--------|-----|---------|----|---------|-----------|-----------|-----------|\n"
         for domain, info in domain_results.items():
             tb_sev = _threatbook_level(info.get("微步"))
             qx_str = _cell(info.get("奇安信"), "campaigns", lambda v, r: f"{r.get('hit_count',0)}hit/{','.join(v[:2]) if v else '无团伙'}")
@@ -977,12 +1104,14 @@ def format_threat_intel(results: dict, config: dict = None) -> str:
             otx_str = _cell(otx, "malware_str", lambda v, r: f"P{r.get('pulse_count',0)}/{v}")
             uh = info.get("URLhaus", {})
             uh_str = _cell(uh, "threat_str", lambda v, r: f"{r.get('url_count',0)}url/{v}")
+            vt_d = info.get("VirusTotal", {})
+            vt_d_str = _cell(vt_d, "malicious_count", lambda v, r: f"{v}/{r.get('total_engines','?')}")
             us = info.get("URLScan.io", {})
             us_str = _cell(us, "result_count", lambda v, r: f"{v}scan/{r.get('malicious_count',0)}mal")
             pd_str = _cell(info.get("Pulsedive"), "risk", lambda v, r: f"{v}/{r.get('threat_str','-')}")
             kasp_str = _cell(info.get("Kaspersky"), "zone", lambda v, r: f"{v}/{r.get('threat_score','-')}")
             tf_str = _cell(info.get("ThreatFox"), "malware_str", lambda v, r: f"{r.get('ioc_count',0)}ioc/{v}")
-            md += f"| `{domain}` | {tb_sev} | {qx_str} | {otx_str} | {uh_str} | {us_str} | {pd_str} | {kasp_str} | {tf_str} |\n"
+            md += f"| `{domain}` | {tb_sev} | {qx_str} | {otx_str} | {uh_str} | {vt_d_str} | {us_str} | {pd_str} | {kasp_str} | {tf_str} |\n"
 
     # Hash查询结果
     hash_results = results.get("hashes", {})
