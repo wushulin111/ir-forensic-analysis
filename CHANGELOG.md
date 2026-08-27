@@ -4,7 +4,7 @@
 - 兼容 PowerShell 4.0+（Server 2012 / 2012 R2）
 - 修复 `Get-ChildItemDepth` 带 `-Filter` 时无法递归子目录的问题，勒索扩展名 / 勒索信扫描不再漏子文件夹
 - `::new()`、`-Depth`、`Get-NetIPAddress` 等 PS5 专属写法改为 PS4 兼容实现
-- 新增 `IR_Collect_v5.3_ps4compat.ps1` 与 `IR_Collect_v5.3_ps4compat.exe`（GUI 启动器内嵌修好的采集脚本）
+- `IR_Collect_v5.3.ps1` 与 `IR_Collect_v5.3_GUI.exe` 升级为 PS4 兼容版（内嵌修好的采集脚本），并移除原 v5.3.3 版本
 
 ## ir-forensic-analysis v4.5.3 (2026-08-25)
 **威胁情报增强 + who.sh POSIX 兼容修复**

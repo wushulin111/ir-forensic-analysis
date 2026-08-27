@@ -1,7 +1,7 @@
 ﻿# ============================================================
 # Windows IR Forensic Collection Script v5.3.3 (ASCII/UTF-8 BOM)
 # Collection order: volatility (most volatile -> persistent)
-# Compatible: PowerShell 5.1+
+# Compatible: PowerShell 4.0+
 # ============================================================
 
 param(
@@ -40,7 +40,7 @@ $ZIP = Join-Path $BASE "IR_${HOSTNAME}_${TIMESTAMP}.zip"
 $LOG = Join-Path $DIR "collection.log"
 
 # ---------- Log buffer ----------
-$logBuf = [System.Text.StringBuilder]::new()
+$logBuf = New-Object System.Text.StringBuilder
 $logFlushThreshold = 20
 $logCounter = 0
 function Write-Log {
@@ -82,7 +82,7 @@ function Show-Progress {
     param([string]$T, [int]$P, [string]$S)
     if ($null -eq $global:pf) {
         $global:pf = New-Object System.Windows.Forms.Form
-        $global:pf.Text = "IR 应急取证采集 v5.3.3"
+        $global:pf.Text = "应急取证采集 ps4compat"
         $global:pf.Size = New-Object System.Drawing.Size(520, 150)
         $global:pf.StartPosition = "CenterScreen"
         $global:pf.FormBorderStyle = "FixedDialog"
@@ -192,7 +192,8 @@ function Copy-BrowserArtifact {
 
 # ---------- Process name library ----------
 $knownNames = @('DingTalk','WeChat','Weixin','WXWork','Chrome','msedge','firefox','svchost','explorer','lsass','winlogon','csrss','smss','taskmgr','spoolsv','services','rundll32','RuntimeBroker','SearchIndexer','sihost','taskhostw','ctfmon','notepad','winword','excel','powerpnt','outlook','OneDrive','Teams','Code','wps','wpscloudsvr','wpspdf','vmware-tray','vmtoolsd','VGAuthService','vm3dservice','YunMai','WeMeet','Zoom','conhost','dllhost','dwm','WmiPrvSE','MsMpEng','NisSrv','SecurityHealthService','QQ','QQMusic','QQPinyin','TIM','AliWork','opera','foxmail','XMind','PotPlayer','Bandizip','7zFM','WinRAR','Everything','Typora','Obsidian','Docker','python','java','node','git','FileZilla','Xshell','Xftp','Putty','Navicat','nginx','httpd','vpnui')
-$knownNamesLower = [System.Collections.Generic.HashSet[string]]($knownNames | ForEach-Object { $_.ToLowerInvariant() })
+$knownNamesLower = @{}
+$knownNames | ForEach-Object { $knownNamesLower[$_.ToLowerInvariant()] = $true }
 
 # Anomaly patterns (single-quoted to avoid escaping)
 $sq = @(
@@ -289,6 +290,39 @@ function Get-UserDirs {
     }
     $global:UserDirCache = $userDirs
     return $userDirs
+}
+
+# ---------- Depth-limited Get-ChildItem (PS 4.0 compat) ----------
+function Get-ChildItemDepth {
+    param(
+        [string]$Path,
+        [int]$Depth = 5,
+        [string]$Filter,
+        [switch]$File,
+        [switch]$Recurse
+    )
+    # 始终对目录递归下钻，避免带 -Filter 时过滤器把子目录一并过滤掉导致无法深入子文件夹；
+    # 过滤器只作用于最终输出的条目，不作用于遍历过程。
+    $stack = New-Object System.Collections.Stack
+    $stack.Push(@{Path=$Path; CurrentDepth=0})
+    while ($stack.Count -gt 0) {
+        $item = $stack.Pop()
+        $currentPath = $item.Path
+        $currentDepth = $item.CurrentDepth
+        $children = @(Get-ChildItem -Path $currentPath -ErrorAction SilentlyContinue)
+        foreach ($child in $children) {
+            if ($child.PSIsContainer) {
+                if (-not $File -and $currentDepth -lt $Depth) {
+                    if (-not $Filter -or $child.Name -like $Filter) { $child }
+                }
+                if ($currentDepth -lt $Depth) {
+                    $stack.Push(@{Path=$child.FullName; CurrentDepth=($currentDepth+1)})
+                }
+            } else {
+                if (-not $Filter -or $child.Name -like $Filter) { $child }
+            }
+        }
+    }
 }
 
 # ---------- RWX Memory Scanner ----------
@@ -528,7 +562,7 @@ function Invoke-TargetedCollection {
     foreach ($root in $roots) {
         if ($fileRows.Count -ge $maxFiles) { break }
         $remaining = $maxFiles - $fileRows.Count
-        $candidates = Get-ChildItem -Path $root -Recurse -File -ErrorAction SilentlyContinue -Depth $depth |
+        $candidates = Get-ChildItemDepth -Path $root -Depth $depth -File |
             Where-Object { $_.FullName -match [regex]::Escape($keyword) } |
             Select-Object -First $remaining
         foreach ($f in $candidates) {
@@ -570,7 +604,7 @@ function Invoke-TargetedCollection {
 
 # ===== Main =====
 try {
-    Show-Progress -T "IR 应急取证采集 v5.3.3" -P 0 -S "正在初始化..."
+    Show-Progress -T "应急取证采集 ps4compat" -P 0 -S "正在初始化..."
     $fmt = "yyyy-MM-dd HH:mm:ss"
     Write-Log "[=== Collection started $(Get-Date -Format $fmt) ===]"
     Write-Log "Host: $HOSTNAME | PS: $($PSVersionTable.PSVersion)"
@@ -582,7 +616,7 @@ try {
       "$DIR\5_filesystem","$DIR\5_filesystem\ransomware_vss",
       "$DIR\6_logs","$DIR\6_logs\extended","$DIR\7_web","$DIR\browser_artifacts","$DIR\0_offline") | ForEach-Object { New-Item -ItemType Directory -Force -Path $_ | Out-Null }
 
-    $moduleStatus = [System.Collections.ArrayList]::new()
+    $moduleStatus = New-Object System.Collections.ArrayList
     function Add-ModuleStatus {
         param([string]$ModuleId, [string]$Name, [string]$Status, [string]$Error, [int]$FileCount, [long]$TotalBytes)
         [void]$moduleStatus.Add(@{ module_id=$ModuleId; name=$Name; status=$Status; error=if($Error){$Error}else{""}; file_count=$FileCount; total_bytes=$TotalBytes })
@@ -932,7 +966,7 @@ try {
         $scanRoots = @($scanRoots | Select-Object -Unique)
         foreach ($root in $scanRoots) {
             foreach ($ext in $ransomExts) {
-                $matches = Get-ChildItem -Path $root -Recurse -ErrorAction SilentlyContinue -Depth $ScanDepth -Filter "*$ext" -File | Select-Object -First 20
+                $matches = Get-ChildItemDepth -Path $root -Depth $ScanDepth -Filter "*$ext" -File | Select-Object -First 20
                 if ($matches) { $foundExts += [PSCustomObject]@{Root=$root; Ext=$ext; Count=($matches|Measure-Object).Count} }
             }
         }
@@ -942,7 +976,7 @@ try {
         $allNotes = @()
         foreach ($pat in $notePatterns) {
             foreach ($root in $scanRoots) {
-                $n = Get-ChildItem -Path $root -Recurse -ErrorAction SilentlyContinue -Depth $ScanDepth -Filter $pat -File | Where-Object { $_.Length -le 100000 } | Select-Object -First 20
+                $n = Get-ChildItemDepth -Path $root -Depth $ScanDepth -Filter $pat -File | Where-Object { $_.Length -le 100000 } | Select-Object -First 20
                 if ($n) { $allNotes += $n }
             }
         }
@@ -990,7 +1024,7 @@ try {
 
         $tempExes = @()
         foreach ($root in $scanRoots) {
-            $tempExes += Get-ChildItem -Path $root -Recurse -ErrorAction SilentlyContinue -Depth $ScanDepth | Where-Object { -not $_.PSIsContainer } | Select-Object FullName, Length, LastWriteTime, CreationTime
+            $tempExes += Get-ChildItemDepth -Path $root -Depth $ScanDepth | Where-Object { -not $_.PSIsContainer } | Select-Object FullName, Length, LastWriteTime, CreationTime
         }
         $tempExes | Export-Csv "$F\temp_executables.csv" -NoTypeInformation -Encoding UTF8
 
@@ -1006,7 +1040,7 @@ try {
             foreach ($cat in $threatCats.Keys) {
                 $exts = $threatCats[$cat]
                 try {
-                    $files = Get-ChildItem -Path $root -Recurse -ErrorAction SilentlyContinue -Depth $ScanDepth -File | Where-Object {
+                    $files = Get-ChildItemDepth -Path $root -Depth $ScanDepth -File | Where-Object {
                         $ext = $_.Extension.ToLower(); $exts -contains $ext
                     } | Select-Object FullName, Length, LastWriteTime
                     if ($files) {
@@ -1021,7 +1055,7 @@ try {
         }
 
         if (Test-Path "$env:USERPROFILE\Downloads") {
-            Get-ChildItem "$env:USERPROFILE\Downloads" -Recurse -ErrorAction SilentlyContinue -Depth $ScanDepth | Where-Object { -not $_.PSIsContainer } | Sort-Object LastWriteTime -Descending | Select-Object FullName, Length, LastWriteTime | Export-Csv "$F\downloads.csv" -NoTypeInformation -Encoding UTF8
+            Get-ChildItemDepth -Path "$env:USERPROFILE\Downloads" -Depth $ScanDepth | Where-Object { -not $_.PSIsContainer } | Sort-Object LastWriteTime -Descending | Select-Object FullName, Length, LastWriteTime | Export-Csv "$F\downloads.csv" -NoTypeInformation -Encoding UTF8
         }
         if (Test-Path "$env:USERPROFILE\Recent") {
             Get-ChildItem "$env:USERPROFILE\Recent" -ErrorAction SilentlyContinue | Select-Object Name, Length, LastWriteTime | Export-Csv "$F\recent_files.csv" -NoTypeInformation -Encoding UTF8
@@ -1073,7 +1107,7 @@ try {
     $sysmonInfo = if (Get-Service Sysmon -ErrorAction SilentlyContinue) { "Sysmon: installed, service status=$((Get-Service Sysmon).Status)" } else { "Sysmon: not installed" }
     $webSvrs = @(); if (Test-Path "$env:SystemRoot\System32\inetsrv\w3wp.exe"){$webSvrs+="IIS"}; if (Get-Command nginx -ErrorAction SilentlyContinue){$webSvrs+="Nginx(PATH)"}; if (Test-Path (Join-Path $env:ProgramFiles "nginx\nginx.exe")){$webSvrs+="Nginx(ProgFiles)"}; if (Get-Command httpd -ErrorAction SilentlyContinue){$webSvrs+="Apache"}
     $lp = netstat.exe -ano | Select-String "LISTENING" | ForEach-Object { if($_ -match "TCP\s+(\S+:\d+)\s+.*LISTENING\s+(\d+)") { $iport=$matches[1]; $p=$matches[2]; try{$pn=(Get-Process -Id $p -ErrorAction SilentlyContinue).ProcessName}catch{$pn="?"}; "$iport ($pn)" } }
-    @("Service version info (IR_Collect v5.3.3)";"Generated: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')";"============================";$iisVer;$rdpStatus;$sshInfo;$javaInfo;"Web servers: $(if($webSvrs.Count -gt 0){$webSvrs -join ', '}else{'none'})";"============================";"Listening ports:";$lp;"";"Sysmon status:";$sysmonInfo) | Out-File $SV -Encoding UTF8
+    @("Service version info (IR_Collect ps4compat)";"Generated: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')";"============================";$iisVer;$rdpStatus;$sshInfo;$javaInfo;"Web servers: $(if($webSvrs.Count -gt 0){$webSvrs -join ', '}else{'none'})";"============================";"Listening ports:";$lp;"";"Sysmon status:";$sysmonInfo) | Out-File $SV -Encoding UTF8
     Write-Log "[OK] Service version summary"
     Show-Progress -P 79 -S "[8/9] Web完成"
     $m8files = Get-ChildItem "$W" -File -ErrorAction SilentlyContinue
@@ -1299,7 +1333,9 @@ try {
     Write-Log "[OK] TEMP_MEI comparison done"
 
     Show-Progress -P 86 -S "[9/9] 计算元数据..."
-    $ips = try { (Get-NetIPAddress -AddressFamily IPv4 -ErrorAction Stop | Where-Object { $_.InterfaceAlias -notmatch 'Loopback' }).IPAddress -join ', ' } catch { "" }
+    $ips = try { (Get-NetIPAddress -AddressFamily IPv4 -ErrorAction Stop | Where-Object { $_.InterfaceAlias -notmatch 'Loopback' }).IPAddress -join ', ' } catch {
+        try { (Get-WmiObject Win32_NetworkAdapterConfiguration -Filter "IPEnabled=True" -ErrorAction Stop | Where-Object { $_.IPAddress -and $_.IPAddress -notmatch '^127\.' }).IPAddress -join ', ' } catch { "" }
+    }
     $os = try { (Get-CimInstance Win32_OperatingSystem -ErrorAction Stop).Caption } catch { "Unknown" }
     $allFiles = Get-ChildItem $DIR -Recurse -File -ErrorAction SilentlyContinue
     $fileCount = @($allFiles).Count
@@ -1313,7 +1349,7 @@ Host: $HOSTNAME
 IP(s): $ips
 OS: $os
 Time: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
-Script version: IR_Collect v5.3.3
+Script version: IR_Collect ps4compat
 Mode: $(if($DeepForensic){'deep'}else{'quick'})
 ScanDepth: $ScanDepth
 SkipFileScan: $SkipFileScan

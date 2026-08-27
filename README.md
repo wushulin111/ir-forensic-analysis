@@ -10,7 +10,7 @@
 `ir-forensic-analysis` 是一个面向应急响应场景的自动化取证分析工具集，包含：
 
 - **分析引擎** — SKILL.md 驱动的 LLM 11 维深度分析
-- **Windows 采集脚本** — `IR_Collect_v5.3.ps1`（默认快照 + `-DeepForensic` 深度取证 + `-Target` 定向采集）/ `IR_Collect_v5.3_GUI.exe`（自包含中文选项弹窗版）/ `IR_Collect_v5.3_ps4compat.ps1` + `.exe`（PS4 兼容版，兼容 Server 2012），管理员运行
+- **Windows 采集脚本** — `IR_Collect_v5.3.ps1`（默认快照 + `-DeepForensic` 深度取证 + `-Target` 定向采集，PS4 兼容）/ `IR_Collect_v5.3_GUI.exe`（自包含中文选项弹窗版），管理员运行
 - **Linux 采集脚本** — `who.sh`（司稽 v8.1，sudo 运行）
 - **macOS 采集脚本** — `mac_collect.sh` v2.1（兼容 10.15+ / Intel+Apple Silicon，覆盖系统、网络、进程、持久化、账号、浏览器、日志、安全配置）
 - **威胁情报模块** — 多源自动交叉分析（微步/OTX/URLhaus/VT/CVERC/AbuseIPDB/Pulsedive/URLScan/ThreatFox 等）
@@ -23,7 +23,7 @@
 - `[System.Text.StringBuilder]::new()`、`-Depth`、`Get-NetIPAddress` 等 PS5 专属写法改为 PS4 兼容实现
 - 新增 `Get-ChildItemDepth` 深度限定递归函数
 - **修复**该函数带 `-Filter` 时无法下钻子目录的问题，勒索扩展名 / 勒索信扫描不再漏掉子文件夹
-- 新增 `IR_Collect_v5.3_ps4compat.ps1` 与 `IR_Collect_v5.3_ps4compat.exe`（GUI 启动器内嵌修好的采集脚本）
+- v5.3.4 的 `IR_Collect_v5.3.ps1` 与 `IR_Collect_v5.3_GUI.exe` 已升级为 PS4 兼容版（内嵌修好的采集脚本），原 v5.3.3 版本已移除
 - 兼容下限为 PowerShell 3.0+（Server 2012 默认 PS3、2012 R2 PS4），PowerShell 2.0 / Server 2008 仍需降级处理
 
 ## v5.3.3 更新说明
@@ -85,8 +85,7 @@ python scripts/analyze_forensics.py ./extracted/IR_HOSTNAME_TIMESTAMP/ -r ./rule
 | 脚本 | 定位 | 什么情况用 |
 |------|------|-----------|
 | `IR_Collect_v5.3.ps1` | 默认快照采集，可选 `-DeepForensic` 深度取证 | 常规应急响应默认使用；重大事件、需要离线痕迹/扩展日志时加 `-DeepForensic` |
-| `IR_Collect_v5.3_GUI.exe` | 自包含图形化选项启动器（v5.3.3） | 现场不想记命令时，只复制这一个 exe 到目标电脑双击即可，按需求勾选采集模式 |
-| `IR_Collect_v5.3_ps4compat.ps1` / `.exe` | PS4 兼容版（v5.3.4） | 目标机为 Server 2012 / 2012 R2 等 PowerShell 4.0 环境时使用；已修复深度扫描不递归子目录的问题 |
+| `IR_Collect_v5.3_GUI.exe` | 自包含图形化选项启动器（v5.3.4） | 现场不想记命令时，只复制这一个 exe 到目标电脑双击即可，按需求勾选采集模式 |
 
 > v5.1/v5.2 的能力已全部合并进 v5.3（含 `-Target` 定向采集），GitHub 发布版只维护 v5.3 一个脚本。
 
@@ -96,10 +95,6 @@ powershell.exe -ExecutionPolicy Bypass -File assets/IR_Collect_v5.3.ps1
 
 # 图形化选项版（自包含单文件，双击运行，按需勾选）
 assets/IR_Collect_v5.3_GUI.exe
-
-# PS4 兼容版（Server 2012 等 PowerShell 4.0 环境）
-powershell.exe -ExecutionPolicy Bypass -File assets/IR_Collect_v5.3_ps4compat.ps1
-assets/IR_Collect_v5.3_ps4compat.exe
 
 # 深度取证：离线痕迹 + 扩展日志 + 浏览器深库
 powershell.exe -ExecutionPolicy Bypass -File assets/IR_Collect_v5.3.ps1 -DeepForensic
