@@ -172,7 +172,7 @@ done
 
 ### 取证包目录结构
 
-详见 `references/DIRECTORY_MAPPING.md`。收到取证包后按该文档识别来源格式并定位文件。`IR_Collect_v5.3.ps1 -DeepForensic` 会在常规目录之外追加 `0_offline/`、`6_logs/extended/`、`browser_artifacts/deep/`，目录映射与分析方法见下方“v5.3 深度取证包分析指引”。
+详见 `references/DIRECTORY_MAPPING.md`。收到取证包后按该文档识别来源格式并定位文件。`IR_Collect_v5.3.ps1 -DeepForensic`（v5.3.4 PS4 兼容版）会在常规目录之外追加 `0_offline/`、`6_logs/extended/`、`browser_artifacts/deep/`，目录映射与分析方法见下方“v5.3.4 深度取证包分析指引”。
 
 ---
 
@@ -203,7 +203,7 @@ done
 | P2 | `1_volatile/tasklist.csv` | `3_persistence/bashrc_profile.txt` | 杀软缺失/Shell劫持 |
 | P2 | `vss_shadows.txt` | `3_persistence/modules_load.txt` | 卷影删除/内核模块后门 |
 
-### v5.3 深度取证包分析指引（`IR_Collect_v5.3.ps1 -DeepForensic`）
+### v5.3.4 深度取证包分析指引（`IR_Collect_v5.3.ps1 -DeepForensic`）
 
 若取证包包含以下目录，说明现场使用了 v5.3 深度取证模式；缺少这些目录则为 v5.3 快速模式或旧版采集。深度模式在完成快速评估后，继续按以下顺序分析离线痕迹，补充常规快照无法覆盖的程序执行、文件访问、远程登录与浏览器深层痕迹。
 
