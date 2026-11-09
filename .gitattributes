@@ -1,0 +1,19 @@
+# 统一换行符，避免 Windows/Linux 混用导致无意义的整文件 diff
+* text=auto eol=lf
+
+*.ps1   text eol=crlf
+*.bat   text eol=crlf
+*.cmd   text eol=crlf
+*.sh    text eol=lf
+*.py    text eol=lf
+*.md    text eol=lf
+*.json  text eol=lf
+*.yar   text eol=lf
+
+*.exe   binary
+*.dll   binary
+*.pyc   binary
+*.zip   binary
+*.dat   binary
+*.hive  binary
+*.evtx  binary

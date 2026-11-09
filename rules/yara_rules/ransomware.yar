@@ -86,7 +86,7 @@ rule Ransomware_Generic_Behavior {
     $bitcoin = "bitcoin" ascii nocase wide
     $tor = ".onion" ascii wide
   condition:
-    (any of ($vss1,$vss2,$wbadmin,$bcdedit) and any of ($note1,$note2,$note3)) or
+    (any of ($vss1,$vss2,$wbadmin,$bcdedit,$disabler) and any of ($note1,$note2,$note3)) or
     (any of ($stop_vss,$stop_vss2,$backup_del) and any of ($note1,$note2,$note3)) or
     (any of ($note1,$note2,$note3,$note4) and $bitcoin and $tor)
 }

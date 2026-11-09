@@ -112,7 +112,7 @@ python scripts/extract_archive.py /path/to/archive -t tar.gz
 
 ### 功能
 
-执行完整的取证分析，包括进程、启动项、账号、网络和Webshell检测。
+执行取证分析，包括进程、持久化、账号、网络、Webshell、内存注入和横向移动。v2.1 起直接读取 v5.3.5 的 `white_black_process_alerts.csv`、`white_black_module_alerts.csv` 与 `white_black_history_alerts.csv`，保留模块哈希、签名、风险分和真实事件时间。
 
 ### 基本用法
 
@@ -128,6 +128,9 @@ python scripts/analyze_forensics.py ./extracted/IR/ --only processes,ips
 
 # 与历史分析对比
 python scripts/analyze_forensics.py ./extracted/IR/ -c ./historical/
+
+# 明确需要时才把本次发现写入经验规则（默认规则库只读）
+python scripts/analyze_forensics.py ./extracted/IR/ --update-rules
 ```
 
 ### 参数说明
@@ -139,16 +142,19 @@ python scripts/analyze_forensics.py ./extracted/IR/ -c ./historical/
 | `--output` | `-o` | 报告输出目录 | `./report` |
 | `--compare-with` | `-c` | 历史分析结果目录 | 可选 |
 | `--only` | - | 仅分析指定类型 | 可选 |
+| `--update-rules` | - | 允许更新 `rules_updated.json`；默认不修改规则库 | 关闭 |
 
 ### 分析类型选项
 
 `--only` 参数支持以下类型（逗号分隔）：
 
 - `processes` - 仅分析可疑进程
-- `startup` - 仅分析启动项
+- `persistence` - 仅分析持久化
 - `accounts` - 仅分析账号
 - `ips` - 仅分析网络连接
 - `webshell` - 仅分析Webshell
+- `injection` - 仅分析内存注入
+- `lateral` - 仅分析横向移动
 
 ### 输出文件
 
@@ -158,10 +164,13 @@ python scripts/analyze_forensics.py ./extracted/IR/ -c ./historical/
 |------|------|
 | `incident_report.md` | 完整应急报告（Markdown格式） |
 | `suspicious_processes.json` | 可疑进程详情 |
-| `anomaly_startup.json` | 异常启动项详情 |
+| `persistence_mechanisms.json` | 持久化机制详情 |
 | `anomaly_accounts.json` | 异常账号详情 |
 | `suspicious_ips.json` | 可疑外联IP详情 |
 | `webshell_traces.json` | Webshell痕迹详情 |
+| `injection_indicators.json` | 内存注入指标详情 |
+| `lateral_movement.json` | 横向移动详情 |
+| `timeline.csv` | 含真实采集时间的攻击时间线（源数据有时间字段时） |
 
 ### 输出示例
 
@@ -197,17 +206,13 @@ python scripts/analyze_forensics.py ./extracted/IR/ -c ./historical/
     [+] suspicious_processes.json 已保存
     ...
 
-[*] 正在更新经验规则库...
-    [+] 经验规则已更新: ./rules/rules_updated.json
-    [+] 新增进程规则: 5
-    [+] 新增IP规则: 8
-    [+] 新增Webshell规则: 3
-
 ============================================================
 分析完成!
 报告位置: ./report/incident_report.md
 ============================================================
 ```
+
+> 只有传入 `--update-rules` 才会出现“正在更新经验规则库”，避免普通分析改写规则基线。
 
 ---
 

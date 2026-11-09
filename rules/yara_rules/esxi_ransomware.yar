@@ -72,5 +72,6 @@ rule ESXi_Ransomware_Generic {
   condition:
     (any of ($s2,$s3,$s4) and #s5 > 3) or
     (all of ($s1,$s5) and any of ($s2,$s3,$s4,$s8,$s9)) or
-    (#s5 > 10 and #s6 > 5 and any of ($s2,$s3,$s10))
+    (#s5 > 10 and #s6 > 5 and any of ($s2,$s3,$s10)) or
+    (#s7 > 2 and any of ($s2,$s3,$s4))
 }

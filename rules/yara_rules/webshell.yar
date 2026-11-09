@@ -27,7 +27,7 @@ rule Webshell_PHP_Generic {
 
     condition:
         filesize < 500KB and (
-            (2 of ($eval, $assert, $base64, $system, $exec, $shell_exec, $passthru, $proc_open) and
+            (2 of ($eval, $assert, $base64, $system, $exec, $shell_exec, $passthru, $proc_open, $chmod, $file_put, $move_upload) and
              1 of ($post_var, $get_var, $request_var, $cmd)) or
             any of ($one_liner*)
         )
@@ -71,7 +71,7 @@ rule Webshell_JSP_Generic {
         $request_getparameter = "request.getParameter" nocase
 
     condition:
-        $runtime and $exec and 1 of ($inputstream, $bufferedreader) and $request_getparameter
+        $runtime and $exec and 1 of ($inputstream, $bufferedreader, $processbuilder) and $request_getparameter
 }
 
 rule Webshell_ASP_Generic {

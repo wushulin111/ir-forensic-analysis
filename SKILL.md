@@ -7,7 +7,7 @@ description: >
 license: MIT
 metadata:
   author: OpenClaw
-  version: "4.3.0"
+  version: "4.5.5"
   category: security-forensics
   language: zh-CN
 ---
@@ -25,14 +25,14 @@ metadata:
 | 5 | Webshell | 一句话木马/大马/内存马/杀软对抗/常见文件名 | T1505, T1059, T1562 |
 | 6 | 内存注入 | RWX区域/反射DLL/进程空心化/Beacon特征/无文件攻击 | T1055, T1620 |
 | 7 | 横向移动 | SMB/RDP/SSH扫描/PsExec/WMI远程/哈希传递/WinRM | T1021, T1047, T1550 |
-| 8 | 高级对抗 | 银狐专项(43条规则/1918域名/414IP/45哈希)+远控对抗：Unhooking致盲EDR/PoolParty注入/自编写驱动/白加黑/多阶段加载 | T1562, T1055, T1014 |
+| 8 | 高级对抗 | 银狐专项(40条规则/28886域名/451IP/51哈希)+远控对抗：Unhooking致盲EDR/PoolParty注入/自编写驱动/白加黑/多阶段加载 | T1562, T1055, T1014 |
 | 9 | **进程名仿冒+签名** | 字符替换仿冒svch0st→svchost/Levenshtein官方名偏差/数字签名验证/哈希篡改 | T1036.005, T1036.002 |
 | 10 | **打包器/载荷** | **PyInstaller/PyArmor/UPX/Enigma检测/TEMP_MEI快照对比/多阶段加载识别(v4.2新增)** | T1027, T1059 |
 | 11 | **供应链/勒索** | **勒索家族分类识别(8族)+ESXi虚拟化勒索+NAS漏洞入侵+第三方运维盲区+Dwell Time评估+因果链攻击路径复盘** | T1486, T1490, T1195, T1133 |
 
 > 第10维「打包器/载荷」为 v4.2 新增，第11维「供应链/勒索」为 v3.0 新增，整合了勒索病毒家族深度检测、ESXi/NAS 专项、供应链入侵排查和因果链攻击路径复盘方法论。
 
-> 第8维「高级对抗」合并了银狐专项(43条规则/1918域名/414IP/45哈希)和远控对抗检测，用 `fox_tag`（银狐家族特征）和 `generic_rat_tag`（通用远控对抗）标签区分归属。
+> 第8维「高级对抗」合并了银狐专项(40条规则/28886域名/451IP/51哈希)和远控对抗检测，用 `fox_tag`（银狐家族特征）和 `generic_rat_tag`（通用远控对抗）标签区分归属。
 
 ---
 
@@ -172,7 +172,7 @@ done
 
 ### 取证包目录结构
 
-详见 `references/DIRECTORY_MAPPING.md`。收到取证包后按该文档识别来源格式并定位文件。`IR_Collect_v5.3.ps1 -DeepForensic`（v5.3.4 PS4 兼容版）会在常规目录之外追加 `0_offline/`、`6_logs/extended/`、`browser_artifacts/deep/`，目录映射与分析方法见下方“v5.3.4 深度取证包分析指引”。
+详见 `references/DIRECTORY_MAPPING.md`。收到取证包后按该文档识别来源格式并定位文件。`IR_Collect_v5.3.ps1 -DeepForensic`（v5.3.6，PowerShell 4.0+）会在常规目录之外追加 `0_offline/`、`6_logs/extended/`、`browser_artifacts/deep/`，目录映射与分析方法见下方“v5.3.6 深度取证包分析指引”。v5.3.6 GUI 改为同一 x64 进程内调用完整采集器，不减少任何输出字段或模块。
 
 ---
 
@@ -182,28 +182,31 @@ done
 
 | 优先级 | Windows 文件 | Linux 文件 | 检测目标 |
 |--------|-------------|-----------|----------|
-| P0 | `02_Process/ioc_alerts.txt` **★v4.0** | — | **IOC告警进程**（离线扫描已知恶意进程） |
-| P0 | `04_FileSystem/lolbin_alerts.txt` **★v4.0** | — | **LOLBin 滥用告警**（certutil/mshta/powershell -enc 等） |
-| P0 | `12_Metadata/top_hash.txt` **★v4.0** / `collection_manifest.json` **★v5.3** | — | **证据完整性校验**（v4.0 哈希链；v5.3 起为压缩包 SHA256 + 采集清单） |
+| P0 | `1_volatile/process_name_anomalies.csv` **★** | — | 进程名仿冒/伪装（替代旧版 ioc_alerts） |
+| P0 | `6_logs/powershell_scriptblock.txt` | — | LOLBin/PowerShell 滥用命令（替代旧版 lolbin_alerts） |
+| P0 | `collection_manifest.json` / `IR_metadata.txt` / `file_manifest.csv` | — | **证据完整性校验**（压缩包 SHA256 + 采集清单） |
 | P0 | `1_volatile/netstat_anob.txt` | `1_volatile/netstat_ano.txt` + `ss_tlnp.txt` | C2外联/反Shell/银狐端口 |
 | P0 | `1_volatile/process_tree.csv` | `1_volatile/process_tree.txt` | 进程注入/父子异常 |
 | P0 | `1_volatile/process_authenticode.csv` **★** | — | 进程数字签名验证 |
+| P0 | `1_volatile/process_tree_enriched.csv` / `white_black_process_alerts.csv` **★v5.3.5** | — | 父子进程签名链、路径、命令行与组合风险 |
+| P0 | `1_volatile/loaded_modules.csv` / `white_black_module_alerts.csv` **★v5.3.5** | — | 已加载 DLL/模块哈希、签名及签名宿主加载异常 |
+| P0 | `6_logs/white_black_history_alerts.csv` **★v5.3.5** | — | 已退出进程、Sysmon 模块加载与历史 LOLBin 证据 |
 | P0 | `1_volatile/process_name_anomalies.csv` **★** | — | 进程名仿冒检测 |
 | P0 | `1_volatile/process_tree_anomalies.csv` **★v3.0.3** | — | 进程树关联异常(已退出的可疑进程) |
-| P0 | `5_filesystem/static_scan/static_exe_suspicious.csv` **★v3.0.3** | — | 静态EXE扫描(桌面/下载目录未签名可疑EXE) |
+| P1 | `5_filesystem/interesting_files.csv` | — | 文件扫描结果（v5.4 输出，替代旧版 static_scan） |
 | P0 | `3_persistence/wmi_*.txt` | — | WMI隐蔽持久化 |
-| P1 | `3_persistence/ifeo.txt` | `3_persistence/ld_so_preload.txt` | 映像劫持/隐藏进程 |
-| P1 | `3_persistence/logon_scripts.txt` | `3_persistence/suid_sgid.txt` | 登录后门/SUID提权 |
-| P1 | `3_persistence/com_hijack.csv` | `3_persistence/ssh_authorized_keys.txt` | COM劫持/SSH后门 |
+| P1 | `3_persistence/winlogon.txt`（IFEO 见注册表导出） | `4_backdoor/unhide.txt` | 映像劫持/隐藏进程 |
+| P1 | `3_persistence/logon_scripts.txt` | `4_backdoor/suid_files.txt` | 登录后门/SUID提权 |
+| P1 | `3_persistence/com_hijack.csv` | `2_accounts/ssh_authorized_keys.txt` | COM劫持/SSH后门 |
 | P1 | `2_accounts/sam_users.csv` | `2_accounts/shadow.txt` | 克隆账号/弱口令 |
-| P2 | `5_filesystem/temp_executables.csv` | `7_filesystem/tmp_executables.txt` | 临时目录恶意文件 |
-| P2 | `6_logs/powershell_scriptblock.txt` | `6_logs/auth.log` | PS混淆命令/暴力破解 |
+| P2 | `5_filesystem/temp_executables.csv` | `7_filesystem/tmp_executable.txt` | 临时目录恶意文件 |
+| P2 | `6_logs/powershell_scriptblock.txt` | `6_6_logs/auth_log.txt` | PS混淆命令/暴力破解 |
 | P2 | `1_volatile/process_modules.csv` | `4_backdoor/command_integrity.txt` | ntdll Unhooking/命令替换 |
-| P2 | `3_persistence/services_detail.csv` | `7_filesystem/hidden_files.txt` | 非微软驱动/隐藏文件 |
+| P2 | `3_persistence/services_detail.csv` | `7_filesystem/hidden_dirs.txt` | 非微软驱动/隐藏文件 |
 | P2 | `1_volatile/tasklist.csv` | `3_persistence/bashrc_profile.txt` | 杀软缺失/Shell劫持 |
 | P2 | `vss_shadows.txt` | `3_persistence/modules_load.txt` | 卷影删除/内核模块后门 |
 
-### v5.3.4 深度取证包分析指引（`IR_Collect_v5.3.ps1 -DeepForensic`）
+### v5.3.6 白加黑与深度取证包分析指引（`IR_Collect_v5.3.ps1 -DeepForensic`）
 
 若取证包包含以下目录，说明现场使用了 v5.3 深度取证模式；缺少这些目录则为 v5.3 快速模式或旧版采集。深度模式在完成快速评估后，继续按以下顺序分析离线痕迹，补充常规快照无法覆盖的程序执行、文件访问、远程登录与浏览器深层痕迹。
 
@@ -216,10 +219,13 @@ done
 | P1 | `0_offline/prefetch/*.pf` | 用 PECmd 或手动读取 `.pf` 元数据 | 程序执行次数、最后运行时间、引用 DLL 与文件列表 |
 | P1 | `0_offline/SRUDB.dat` | 用 `SrumDump` 或 ESENT 解析；locked 时提示从 VSS 取 | 网络流量、应用使用、能源数据，辅助网络活动溯源 |
 | P1 | `6_logs/extended/*.evtx` | 优先分析 TaskScheduler、WMI-Activity、AppLocker、Defender、TerminalServices、OpenSSH、CodeIntegrity、Sysmon | 计划任务创建、WMI 持久化、程序执行阻止/放行、远程登录、恶意驱动 |
+| P0 | `6_logs/process_creation_4688.csv` / `sysmon_process_create.csv` / `sysmon_image_load.csv` | 按时间关联父进程、签名宿主、命令行、加载模块与哈希；再与实时进程树交叉验证 | 捕获已退出进程与历史 DLL 侧载，减少仅靠实时快照造成的漏报 |
 | P2 | `browser_artifacts/deep/*` | 解析 Downloads/Bookmarks/Top Sites/Favicons；Firefox 含 cookies/permissions/formhistory；`-IncludeSensitive` 时含 Login Data/Cookies/logins.json/key4.db | 浏览器下载记录、访问痕迹、凭据库，需严格保密并隔离分析 |
 | P2 | `0_offline/hives/*.hive` | 仅当现场使用 `-IncludeSensitive` 时存在；SAM/SYSTEM/SECURITY/SOFTWARE 用 Registry Explorer 离线挂载 | 账号密码哈希、启动配置、安全策略、已安装软件，属高敏数据 |
 
 **完整性校验差异**：v5.3 采集包不再逐文件生成旧版 `hash_chain.txt`，证据完整性以压缩包 SHA256 + `IR_metadata.txt` + `file_manifest.csv` + `collection_manifest.json` 校验；`collection_manifest.json` 的 `errors` 字段列出失败模块，分析时须结合 `.FAILED.txt` / `[SKIP]` 标记判断数据缺失范围。
+
+**白加黑定性规则（v5.3.5）**：先看 `white_black_*_alerts.csv`，再回查 `process_tree_enriched.csv`、`loaded_modules.csv` 和 4688/Sysmon 原始事件。至少满足“可信签名宿主 + 可疑命令行/异常父进程/用户可写目录中的未签名模块/签名失败”中的两个独立信号，或出现 `HashMismatch`、`NotTrusted` 等强签名失败，才提升为 High/Critical。单个 `NotSigned`、单个异常父进程或单个用户可写路径只能作为待复核线索，不能独立定性为入侵。
 
 ---
 
@@ -349,6 +355,7 @@ P3-003 □ 周报中跟踪
   端口: {port_list}
 
 **附件**: 完整分析报告见上文
+```
 ## 分析流程
 
 ### 步骤1: 解压取证包
@@ -454,25 +461,25 @@ mkdir -p /tmp/ir_extracted && cd /tmp/ir_extracted && unzip -o IR.zip
 **两种查询方式**：
 | 方式 | 说明 | 适用场景 |
 |------|------|----------|
-| **自动化脚本** | scripts/threat_intel_lookup.py | 调用 nalyze_forensics.py 时自动执行 |
-| **ThreatMCP 工具** | 	hreatbook MCP Server（15个工具） | 手动调 ip_reputation/domain_analysis 等 |
+| **自动化脚本** | scripts/threat_intel_lookup.py | 调用 analyze_forensics.py 时自动执行 |
+| **ThreatMCP 工具** | threatbook MCP Server（15个工具） | 手动调 ip_reputation/domain_analysis 等 |
 **支持的数据源**：
 | 数据源 | 类型 | 免费额度 | 查询方式 | 适用 |
 |--------|------|---------|----------|------|
-| **微步在线 API** | API | 基础免费 | POST pi.threatbook.cn/v3/scene/ip_reputation | 国内首选，最快最稳定（IP/域名/Hash） |
-| **VirusTotal** | API | 4次/分（免费） | GET irustotal.com/api/v3/files/{hash} / ip_addresses/{ip} | 全球最大，Hash 检测率最高；134字节=未收录 |
-| **AbuseIPDB** | API | 1000次/天（免费） | GET pi.abuseipdb.com/api/v2/check | IP 信誉评分专用，0-100分 |
-| **CVERC 国家平台** | API | 免费 | POST pi.cverc.org.cn/api/v1/file/check | 国内官方 Hash 查询/上传 |
+| **微步在线 API** | API | 基础免费 | POST api.threatbook.cn/v3/scene/ip_reputation | 国内首选，最快最稳定（IP/域名/Hash） |
+| **VirusTotal** | API | 4次/分（免费） | GET virustotal.com/api/v3/files/{hash} / ip_addresses/{ip} | 全球最大，Hash 检测率最高；134字节=未收录 |
+| **AbuseIPDB** | API | 1000次/天（免费） | GET api.abuseipdb.com/api/v2/check | IP 信誉评分专用，0-100分 |
+| **CVERC 国家平台** | API | 免费 | POST api.cverc.org.cn/api/v1/file/check | 国内官方 Hash 查询/上传 |
 | **IPinfo.io** | 免费API | 完全免费 | GET ipinfo.io/{ip}/json | IP归属地/ASN/主机名 |
 **多源查询优先级（自动降级）**：
-`
+```
 IP 查询：微步 → OTX → URLhaus → VT → AbuseIPDB → GreyNoise → Pulsedive → Kaspersky → ThreatFox → IPinfo
 Hash 查询：微步 → OTX → VT → CVERC → MalwareBazaar → ThreatFox → Kaspersky → Pulsedive → Hybrid
 域名查询：微步 → OTX → URLhaus → URLScan.io → Pulsedive → Kaspersky → ThreatFox
-`
+```
 > 任一数据源失败（无 Key/限流/超时），自动降级到下一个可用源。不会因为某个源不可用而中断查询。
-**自动化流程**（已集成到 	hreat_intel_lookup.py 和 nalyze_forensics.py）：
-`
+**自动化流程**（已集成到 threat_intel_lookup.py 和 analyze_forensics.py）：
+```
 分析完成 11 大维度
     ↓
 提取 IOC（ips/domains/hashes）
@@ -483,16 +490,16 @@ Hash 查询：微步 → OTX → VT → CVERC → MalwareBazaar → ThreatFox �
   └─ 域名 → 微步 → OTX → URLhaus → URLScan.io → Pulsedive → Kaspersky → ThreatFox
     ↓
 查询结果格式化 → 追加到报告的"威胁情报关联分析"章节
-`
+```
 **自动查询流程（由 scripts/threat_intel_lookup.py 自动执行，不要求人工复核）**：
 1. 从 timeline 中提取所有非本地外联 IP（排除 127.0.0.1/192.168.x.x/10.x.x.x 等）
 2. 从 file_hashes.csv / process_authenticode.csv 中提取可疑文件 SHA256
-3. 使用 	hreatbook MCP Server 的 ip_reputation 工具查 IP 信誉
+3. 使用 threatbook MCP Server 的 ip_reputation 工具查 IP 信誉
 4. 可疑域名调 domain_analysis 查域名信息
 5. 文件 Hash 通过 VT / 微步查检测率
 6. 命中恶意标记 → 维度4/维度1 输出中加入威胁情报标签，注明来源
 **威胁情报来源格式**（在 IOC 摘要中标记来源）：
-`
+```
 | IP | 微步 | VT恶意数 | AbuseIPDB | IPinfo |
 |----|------|---------|----------|--------|
 | 45.33.32.156 | 高危 | 12/68 | 85/100 | Los Angeles,US |
@@ -500,7 +507,7 @@ Hash 查询：微步 → OTX → VT → CVERC → MalwareBazaar → ThreatFox �
 | Hash | VT检测 | 微步 | CVERC |
 |------|--------|------|-------|
 | d4ac4633... | 18/72 | 高危 | 恶意 |
-`
+```
 > config/threat_intel.json 不存放真实 Key，统一通过 `TI_*` 环境变量或配置文件的占位符配置；未配置 Key 的平台自动跳过，并在“情报交叉分析说明”中标注。
 > scripts/threat_intel_lookup.py 可在命令行独立运行测试。
 ### ④ 哈希链完整性验证（v3.4.0 新增）
@@ -550,13 +557,13 @@ Hash 查询：微步 → OTX → VT → CVERC → MalwareBazaar → ThreatFox �
 
 | # | 检查项 | 对应文件(Win) | 对应文件(Linux) | 必须 |
 |---|--------|-------------|----------------|------|
-| 1.1 | 进程列表（异常路径/恶意名） | `1_volatile/tasklist.csv` + `process_detail.txt` | `live_response/processes.txt` + `ps_ef.txt` | ✅ |
-| 1.2 | 进程可执行路径（/tmp/等） | `1_volatile/process_full.txt` | `live_response/proc_exe_links.txt` | ✅ |
-| 1.3 | 进程内存映射（注入指标） | `1_volatile/process_modules.csv` | `live_response/proc_maps.txt` | ✅ |
-| 1.4 | 进程环境变量（LD_PRELOAD等） | — | `live_response/proc_environ.txt` | ✅ |
-| 1.5 | 进程fd（异常文件访问） | — | `live_response/proc_fd.txt` | ⏭ |
-| 1.6 | /tmp可执行文件 | `5_filesystem/temp_executables.csv` | `system/tmp_executable.txt` + `tmp_executable_hash.txt` | ✅ |
-| 1.7 | 隐藏进程检测 | — | `system/unhide.txt` | ✅ |
+| 1.1 | 进程列表（异常路径/恶意名） | `1_volatile/tasklist.csv` + `process_detail.txt` | `1_volatile/processes.txt` + `ps_ef.txt` | ✅ |
+| 1.2 | 进程可执行路径（/tmp/等） | `1_volatile/process_full.txt` | `1_volatile/proc_exe_links.txt` | ✅ |
+| 1.3 | 进程内存映射（注入指标） | `1_volatile/process_modules.csv` | `1_volatile/proc_maps.txt` | ✅ |
+| 1.4 | 进程环境变量（LD_PRELOAD等） | — | `1_volatile/proc_environ.txt` | ✅ |
+| 1.5 | 进程fd（异常文件访问） | — | `1_volatile/proc_fd.txt` | ⏭ |
+| 1.6 | /tmp可执行文件 | `5_filesystem/temp_executables.csv` | `7_filesystem/tmp_executable.txt` + `tmp_executable_hash.txt` | ✅ |
+| 1.7 | 隐藏进程检测 | — | `4_backdoor/unhide.txt` | ✅ |
 | 1.8 | 勒索/加密进程（ELF静态编译/异常批量IO） | — | `1_volatile/process_full.txt` + `5_filesystem/recent_modified_system.csv` | ✅ |
 | 1.9 | **进程数字签名验证 \*v3.0.1** | `1_volatile/process_authenticode.csv` | — | ✅ |
 | 1.10 | **进程名仿冒检测 \*v3.0.1** | `1_volatile/process_name_anomalies.csv` | — | ✅ |
@@ -569,34 +576,34 @@ Hash 查询：微步 → OTX → VT → CVERC → MalwareBazaar → ThreatFox �
 | # | 检查项 | 对应文件(Win) | 对应文件(Linux) | 必须 |
 |---|--------|-------------|----------------|------|
 | 2.1 | 注册表Run键 | `3_persistence/run_hklm.txt` + `run_hkcu.txt` | — | ✅ |
-| 2.2 | 计划任务 | `3_persistence/schtasks.csv` + `schtasks.xml` | `persistence/crontab_root.txt` + `crontab_system.txt` + `cron_d.txt` | ✅ |
+| 2.2 | 计划任务 | `3_persistence/schtasks.csv` + `schtasks.xml` | `3_persistence/crontab_root.txt` + `crontab_system.txt` + `cron_d.txt` | ✅ |
 | 2.3 | WMI事件订阅 | `3_persistence/wmi_*.txt` | — | ✅ |
-| 2.4 | 启动文件夹 | `3_persistence/startup_folder.csv` | `persistence/rc_local.txt` + `rc3d.txt` | ✅ |
-| 2.5 | 服务劫持 | `3_persistence/services_detail.csv` + `service_dlls.csv` | `persistence/systemd_enabled.txt` + `systemd_running.txt` | ✅ |
+| 2.4 | 启动文件夹 | `3_persistence/startup_folder.csv` | `3_persistence/rc_local.txt` + `rc3d.txt` | ✅ |
+| 2.5 | 服务劫持 | `3_persistence/services_detail.csv` + `service_dlls.csv` | `3_persistence/systemd_enabled.txt` + `systemd_running.txt` | ✅ |
 | 2.6 | Winlogon/IFEO/AppInit | `3_persistence/winlogon.txt` + `ifeo.txt` + `appinit_dlls.txt` | — | ✅ |
 | 2.7 | COM劫持 | `3_persistence/com_hijack.csv` | — | ✅ |
-| 2.8 | 登录脚本 | `3_persistence/logon_scripts.txt` | `persistence/profile_d.txt` | ✅ |
-| 2.9 | LD_PRELOAD | — | `persistence/ld_so_preload.txt` + `ld_so_conf.txt` | ✅ |
-| 2.10 | Shell配置劫持 | `3_persistence/ps_profiles.txt` | `persistence/bashrc_profile.txt` | ⏭ |
-| 2.11 | 用户级systemd | — | `persistence/user_systemd.txt` | ⏭ |
-| 2.12 | 内核模块持久化 | — | `persistence/modules_load.txt` | ⏭ |
-| 2.13 | XDG自启动 | — | `persistence/xdg_autostart.txt` | ⏭ |
-| 2.14 | 包管理器hook | — | `persistence/pkg_hooks.txt` | ⏭ |
+| 2.8 | 登录脚本 | `3_persistence/logon_scripts.txt` | `3_persistence/profile_d.txt` | ✅ |
+| 2.9 | LD_PRELOAD | — | `3_persistence/ld_so_preload.txt` + `ld_so_conf.txt` | ✅ |
+| 2.10 | Shell配置劫持 | `3_persistence/ps_profiles.txt` | `3_persistence/bashrc_profile.txt` | ⏭ |
+| 2.11 | 用户级systemd | — | `3_persistence/user_systemd.txt` | ⏭ |
+| 2.12 | 内核模块持久化 | — | `3_persistence/modules_load.txt` | ⏭ |
+| 2.13 | XDG自启动 | — | `3_persistence/xdg_autostart.txt` | ⏭ |
+| 2.14 | 包管理器hook | — | `3_persistence/pkg_hooks.txt` | ⏭ |
 
 ### 维度3：异常账号
 
 | # | 检查项 | 对应文件(Win) | 对应文件(Linux) | 必须 |
 |---|--------|-------------|----------------|------|
-| 3.1 | UID0/root账号 | `2_accounts/sam_users.csv` | `accounts/uid0_accounts.txt` | ✅ |
-| 3.2 | 空密码账号 | `2_accounts/sam_users.csv` | `accounts/empty_password_accounts.txt` | ✅ |
+| 3.1 | UID0/root账号 | `2_accounts/sam_users.csv` | `2_accounts/uid0_accounts.txt` | ✅ |
+| 3.2 | 空密码账号 | `2_accounts/sam_users.csv` | `2_accounts/empty_password_accounts.txt` | ✅ |
 | 3.3 | `$`后缀隐藏账号 | `2_accounts/hidden_accounts.txt` | — | ✅ |
 | 3.4 | SAM克隆账号(F值对比) | `2_accounts/sam_clone_accounts.txt` | — | ✅ |
 | 3.5 | **WMI账号枚举(v4.3新增)** | `2_accounts/wmi_users.csv` | — | ✅ |
 | 3.6 | **ProfileList注册表(v4.3新增)** | `2_accounts/profilelist_users.csv` | — | ✅ |
-| 3.7 | **多源交叉比对(v4.3新增)** | `2_accounts/hidden_account_crosscheck.txt` | `accounts/shadow.txt` | ✅ |
-| 3.8 | SSH密钥 | — | `accounts/ssh_authorized_keys.txt` | ✅ |
-| 3.9 | SSHD配置 | — | `accounts/sshd_config_audit.txt` | ✅ |
-| 3.10 | sudoers | — | `accounts/sudoers.txt` | ✅ |
+| 3.7 | **多源交叉比对(v4.3新增)** | `2_accounts/hidden_account_crosscheck.txt` | `2_accounts/shadow.txt` | ✅ |
+| 3.8 | SSH密钥 | — | `2_accounts/ssh_authorized_keys.txt` | ✅ |
+| 3.9 | SSHD配置 | — | `2_accounts/sshd_config_audit.txt` | ✅ |
+| 3.10 | sudoers | — | `2_accounts/sudoers.txt` | ✅ |
 
 **v4.3 多源交叉比对检测逻辑**：
 
@@ -618,13 +625,13 @@ Hash 查询：微步 → OTX → VT → CVERC → MalwareBazaar → ThreatFox �
 
 | # | 检查项 | 对应文件(Win) | 对应文件(Linux) | 必须 |
 |---|--------|-------------|----------------|------|
-| 4.1 | 网络连接 | `1_volatile/netstat_anob.txt` | `network/netstat.txt` + `ss.txt` | ✅ |
-| 4.2 | /proc隐藏连接 | — | `network/proc_net_tcp.txt` + `proc_net_udp.txt` | ✅ |
-| 4.3 | 防火墙/iptables | `1_volatile/firewall_rules_in.txt` | `network/iptables.txt` | ✅ |
-| 4.4 | ARP/路由 | `1_volatile/route.txt` + `arp.txt` | `network/arp.txt` + `route.txt` | ✅ |
-| 4.5 | 暴力破解 | — | `logs/lastb_bruteforce.txt` + `logs/auth_log.txt` | ✅ |
-| 4.6 | 第三方VPN/IPMI/IP段检查 | `1_volatile/netstat_anob.txt` + `1_volatile/firewall_rules_in.txt` | `network/iptables.txt` + `5_system/system_info.txt` | ✅ |
-| 4.7 | 供应链关联IP检查 | `1_volatile/arp.txt` + `1_volatile/net_sessions.txt` | `network/arp.txt` + `1_volatile/last.txt` | ✅ |
+| 4.1 | 网络连接 | `1_volatile/netstat_anob.txt` | `1_volatile/netstat.txt` + `ss.txt` | ✅ |
+| 4.2 | /proc隐藏连接 | — | `1_volatile/proc_net_tcp.txt` + `proc_net_udp.txt` | ✅ |
+| 4.3 | 防火墙/iptables | `1_volatile/iptables.txt` | `1_volatile/iptables.txt` | ✅ |
+| 4.4 | ARP/路由 | `1_volatile/route.txt` + `arp.txt` | `1_volatile/arp.txt` + `route.txt` | ✅ |
+| 4.5 | 暴力破解 | — | `6_logs/lastb_bruteforce.txt` + `6_logs/auth_log.txt` | ✅ |
+| 4.6 | 第三方VPN/IPMI/IP段检查 | `1_volatile/netstat_anob.txt` + `1_volatile/iptables.txt` | `1_volatile/iptables.txt` + `5_system/system_info.txt` | ✅ |
+| 4.7 | 供应链关联IP检查 | `1_volatile/arp.txt` + `1_volatile/net_sessions.txt` | `1_volatile/arp.txt` + `2_accounts/last.txt` | ✅ |
 
 ### 维度5：Webshell
 
@@ -638,28 +645,28 @@ Hash 查询：微步 → OTX → VT → CVERC → MalwareBazaar → ThreatFox �
 
 | # | 检查项 | 对应文件(Win) | 对应文件(Linux) | 必须 |
 |---|--------|-------------|----------------|------|
-| 6.1 | 进程内存映射 | `1_volatile/process_modules.csv` | `live_response/proc_maps.txt` | ✅ |
-| 6.2 | RWX区域检测 | `1_volatile/process_modules.csv` | `live_response/proc_maps.txt` | ✅ |
+| 6.1 | 进程内存映射 | `1_volatile/process_modules.csv` | `1_volatile/proc_maps.txt` | ✅ |
+| 6.2 | RWX区域检测 | `1_volatile/process_modules.csv` | `1_volatile/proc_maps.txt` | ✅ |
 
 ### 维度7：横向移动
 
 | # | 检查项 | 对应文件(Win) | 对应文件(Linux) | 必须 |
 |---|--------|-------------|----------------|------|
-| 7.1 | 网络扫描迹象 | `1_volatile/netstat_anob.txt` | `network/netstat.txt` | ✅ |
+| 7.1 | 网络扫描迹象 | `1_volatile/netstat_anob.txt` | `1_volatile/netstat.txt` | ✅ |
 | 7.2 | RDP/SMB会话 | `1_volatile/net_sessions.txt` | — | ✅ |
-| 7.3 | ARP异常 | `1_volatile/arp.txt` | `network/arp.txt` | ⏭ |
+| 7.3 | ARP异常 | `1_volatile/arp.txt` | `1_volatile/arp.txt` | ⏭ |
 
 ### 维度8：高级对抗
 
 | # | 检查项 | 对应文件(Win) | 对应文件(Linux) | 必须 |
 |---|--------|-------------|----------------|------|
-| 8.1 | SSH软连接后门 | — | `system/ssh_softlink.txt` | ✅ |
-| 8.2 | OpenSSH完整性 | — | `system/openssh_integrity.txt` | ✅ |
-| 8.3 | PAM完整性 | — | `system/pam_integrity.txt` | ✅ |
-| 8.4 | 盖茨木马 | — | `system/gates_trojan.txt` | ✅ |
+| 8.1 | SSH软连接后门 | — | `4_backdoor/ssh_softlink.txt` | ✅ |
+| 8.2 | OpenSSH完整性 | — | `4_backdoor/openssh_integrity.txt` | ✅ |
+| 8.3 | PAM完整性 | — | `4_backdoor/pam_integrity.txt` | ✅ |
+| 8.4 | 盖茨木马 | — | `4_backdoor/gates_trojan.txt` | ✅ |
 | 8.5 | 杀软状态 | `1_volatile/tasklist.csv` | — | ✅ |
-| 8.6 | 包完整性 | `5_filesystem/recent_modified_system.csv` | `system/debsums_check.txt` + `rpm_verify.txt` | ✅ |
-| 8.7 | SUID/Capabilities | — | `system/suid_files.txt` + `capabilities.txt` | ✅ |
+| 8.6 | 包完整性 | `5_filesystem/recent_modified_system.csv` | `4_backdoor/debsums_check.txt` + `rpm_verify.txt` | ✅ |
+| 8.7 | SUID/Capabilities | — | `4_backdoor/suid_files.txt` + `capabilities.txt` | ✅ |
 | 8.8 | ntdll Unhooking | `1_volatile/process_modules.csv` | — | ✅ |
 
 ### 维度9：进程名仿冒 + 数字签名（v3.0.1 新增）
@@ -677,19 +684,28 @@ Hash 查询：微步 → OTX → VT → CVERC → MalwareBazaar → ThreatFox �
 > - `SignerCN` 应与进程声称的厂商一致（如 chrome.exe 应为 Google LLC）
 > - `process_name_anomalies.csv` 的 `Anomalies` 列列出具体异常原因
 
-### 维度10：供应链/勒索专项（v3.0 新增）
+### 维度10：打包器 / 多阶段载荷
+
+| # | 检查项 | 对应文件(Win) | 对应文件(Linux) | 必须 |
+|---|--------|-------------|----------------|------|
+| 10.1 | PyInstaller `_MEI` 运行时目录 | `1_volatile/temp_mei_before.csv` / `temp_mei_after.csv` | — | ✅ |
+| 10.2 | 打包器特征进程（PyArmor/UPX/Enigma/Themida） | `1_volatile/process_tree.csv` + `process_authenticode.csv` | `1_volatile/processes.txt` | ✅ |
+| 10.3 | 多阶段载荷落盘与释放 | `5_filesystem/interesting_files.csv` | `7_filesystem/tmp_executable.txt` | ✅ |
+| 10.4 | 内存中的解包/自解密行为 | `1_volatile/process_modules.csv` | `1_volatile/proc_maps.txt` | ⏭ |
+
+### 维度11：供应链/勒索专项（v3.0 新增）
 
 | # | 检查项 | 对应文件(Win) | 对应文件(Linux) | 必须 |
 |---|--------|-------------|----------------|------|
 | 9.1 | 勒索信文件检测 | `5_filesystem/` 递归搜索 | `7_filesystem/` 递归搜索 | ✅ |
 | 9.2 | 勒索家族特征匹配 | `5_filesystem/recent_modified_system.csv` | `7_filesystem/recent_modified.txt` | ✅ |
 | 9.3 | 卷影删除/VSS服务停止 | `1_volatile/tasklist.csv` + `vss_shadows.txt` | — | ✅ |
-| 9.4 | ESXi虚拟化勒索指标 | — | `system/esxi_logs.txt`（如有） | ⏭ |
-| 9.5 | NAS设备异常 | — | `network/netstat.txt`（NAS端口） | ⏭ |
-| 9.6 | VPN/IPMI/带外管理暴露 | `1_volatile/firewall_rules_in.txt` | `network/iptables.txt` + `system_info.txt` | ✅ |
+| 9.4 | ESXi虚拟化勒索指标 | — | `5_system/virtualization_check.txt`（如有） | ⏭ |
+| 9.5 | NAS设备异常 | — | `1_volatile/netstat.txt`（NAS端口） | ⏭ |
+| 9.6 | VPN/IPMI/带外管理暴露 | `1_volatile/iptables.txt` | `1_volatile/iptables.txt` + `system_info.txt` | ✅ |
 | 9.7 | 共享账号/通用密码 | `2_accounts/sam_users.csv` | `2_accounts/shadow.txt` | ✅ |
-| 9.8 | 第三方远程管理工具 | `1_volatile/tasklist.csv` + `3_persistence/schtasks.csv` | `1_volatile/ps_ef.txt` + `persistence/crontab_root.txt` | ✅ |
-| 9.9 | 供应链软件漏洞/篡改 | `5_filesystem/recent_modified_system.csv` + `installed_software.csv` | `7_filesystem/recent_modified.txt` + `5_system/debsums_check.txt` | ✅ |
+| 9.8 | 第三方远程管理工具 | `1_volatile/tasklist.csv` + `3_persistence/schtasks.csv` | `1_volatile/ps_ef.txt` + `3_persistence/crontab_root.txt` | ✅ |
+| 9.9 | 供应链软件漏洞/篡改 | `5_filesystem/recent_modified_system.csv` + `installed_software.csv` | `7_filesystem/recent_modified.txt` + `4_backdoor/debsums_check.txt` | ✅ |
 | 9.10 | Dwell Time 评估 | 对比首次异常时间与加密/发现时间 | 同左 | ✅ |
 
 ---
@@ -798,7 +814,7 @@ Hash 查询：微步 → OTX → VT → CVERC → MalwareBazaar → ThreatFox �
 
 ```json
 {
-  "schema": "ir-forensic-analysis-report-v1",
+  "schema": "ir-forensic-analysis-report-v2",
   "meta": {
     "analysis_time": "ISO8601",
     "source_type": "linux|windows",
@@ -875,7 +891,7 @@ Hash 查询：微步 → OTX → VT → CVERC → MalwareBazaar → ThreatFox �
 
 ## 银狐攻击链参考（7阶段）
 
-> 完整银狐检测规则见 `rules/silver_fox_rules.json`（43条）、`references/DETECTION_RULES.md#高级对抗检测规则` 和 `references/SILVER_FOX_2026_INTEL.md`
+> 完整银狐检测规则见 `rules/silver_fox_rules.json`（40条）、`references/DETECTION_RULES.md#高级对抗检测规则` 和 `references/SILVER_FOX_2026_INTEL.md`
 
 1. **钓鱼传播** → 仿冒税务/违纪名单/补贴福利/金税四期五期/放假通知下载 MSI/ZIP/CHM
 2. **白加黑/多阶段加载** → 白程序入口篡改→Shellcode→解密DLL→调用 SyncCreate

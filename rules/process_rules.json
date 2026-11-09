@@ -242,5 +242,32 @@
     "mitre_attack": "T1218",
     "created_at": "2026-05-21",
     "hit_count": 0
+  },
+  {
+    "rule_id": "PROC-0014",
+    "type": "dll_side_loading_trust_gap",
+    "name": "签名宿主加载不可信模块",
+    "description": "有效签名的宿主进程加载位于用户可写目录、网络路径或非可信安装目录中的未签名/签名失败 DLL；需结合模块路径、宿主签名、哈希、命令行和历史事件交叉判断",
+    "source_files": [
+      "1_volatile/loaded_modules.csv",
+      "1_volatile/white_black_module_alerts.csv",
+      "6_logs/sysmon_image_load.csv",
+      "6_logs/white_black_history_alerts.csv"
+    ],
+    "required_signal_groups": [
+      ["host_signature_valid", "module_signature_invalid_or_missing"],
+      ["module_user_writable_or_remote", "module_hash_or_path_anomaly"],
+      ["sysmon_event_7", "matching_process_chain_or_command_line"]
+    ],
+    "strong_signals": ["HashMismatch", "NotTrusted", "Revoked", "Invalid"],
+    "known_false_positives": [
+      {"condition": "合法厂商应用加载同目录未签名插件", "note": "仅保留 Medium 复核，需核对安装来源、版本和哈希"},
+      {"condition": "开发/调试环境加载本地构建 DLL", "note": "结合用户身份、项目路径和时间线降级"}
+    ],
+    "severity": "high",
+    "confidence": 0.85,
+    "mitre_attack": "T1574.002",
+    "created_at": "2026-09-02",
+    "hit_count": 0
   }
 ]

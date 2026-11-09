@@ -78,6 +78,7 @@ rule PowerShell_Download_Execute {
     condition:
         filesize < 100KB and (
             (1 of ($iex, $invoke_expression) and 1 of ($new_object, $downloadstring)) or
-            ($encoded_cmd and 1 of ($bypass, $noprofile, $hidden))
+            ($encoded_cmd and 1 of ($bypass, $noprofile, $hidden)) or
+            ($frombase64 and 1 of ($bypass, $noprofile, $hidden))
         )
 }

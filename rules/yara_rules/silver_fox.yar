@@ -53,7 +53,7 @@ rule Silver_Fox_Rootkit_Driver {
         $xor_decrypt_2 = { 32 ?? 32 ?? 32 ?? 32 ?? }
 
     condition:
-        $kabuto or $kabuto_sys or $truesight or (2 of ($xor_decrypt_*))
+        $kabuto or $kabuto_sys or $truesight or (2 of ($xor_decrypt_*)) or ($explorer_pid and 1 of ($kabuto, $kabuto_sys, $truesight))
 }
 
 rule Silver_Fox_AV_Kill_Thread {
@@ -100,7 +100,7 @@ rule Silver_Fox_Remote_Shellcode {
         $lznt1_decompress = "RtlDecompressBuffer" ascii wide
 
     condition:
-        (1 of ($urlmon, $winhttp, $inet_read)) and $svchost and (1 of ($write_mem, $open_proc))
+        (1 of ($urlmon, $winhttp, $inet_read, $lznt1_decompress)) and $svchost and (1 of ($write_mem, $open_proc))
 }
 
 rule Silver_Fox_Phishing_Popup {
@@ -116,7 +116,6 @@ rule Silver_Fox_Phishing_Popup {
         $upgrade_cn = "需要升级" wide
         $version_low_en = "version is too low" nocase wide
         $upgrade_en = "needs to be upgraded" nocase wide
-        $download_exe = ".exe" wide
         $js_redirect = "window.location" ascii
 
     condition:
@@ -170,7 +169,7 @@ rule Silver_Fox_Gh0st_Winos {
         $mutex_global = "3575D265-2C4F-5C20-EB78-D147D5670A9C" ascii wide
 
     condition:
-        $sync_create or $mutex_dba or $mutex_global or ($gh0st and 1 of ($keyboard_log, $remote_desktop, $screen_monitor, $file_manage))
+        $sync_create or $mutex_dba or $mutex_global or $winos or ($gh0st and 1 of ($keyboard_log, $remote_desktop, $screen_monitor, $file_manage))
 }
 
 rule Silver_Fox_Multi_Stage_Loader {
@@ -192,5 +191,5 @@ rule Silver_Fox_Multi_Stage_Loader {
         $user_data_svc = "UserDataSvc_" ascii wide
 
     condition:
-        $sync_create or ($user_data_svc) or (2 of ($runas, $shell_exec, $virtual_alloc, $create_mutex, $set_shutdown))
+        $sync_create or ($user_data_svc) or (2 of ($runas, $shell_exec, $virtual_alloc, $create_mutex, $set_shutdown, $ctrl_handler))
 }

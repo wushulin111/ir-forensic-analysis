@@ -265,17 +265,6 @@
       "hit_count": 1
     },
     {
-      "rule_id": "PROC-7778",
-      "type": "suspicious_path",
-      "pattern": "CommandLine=C:\\Users\\USERNAME\\AppData\\Roaming\\Tencen",
-      "severity": "high",
-      "description": "用户目录执行: 可执行文件从用户AppData/Public/ProgramData运行",
-      "confidence": 0.75,
-      "mitre_attack": "T1204.002",
-      "created_at": "2026-05-07T17:31:57.413043",
-      "hit_count": 1
-    },
-    {
       "rule_id": "PROC-9873",
       "type": "suspicious_path",
       "pattern": "CommandLine=\"C:\\Users\\USERNAME\\AppData\\Roaming\\Tence",

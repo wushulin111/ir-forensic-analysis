@@ -8,7 +8,14 @@ import os
 import sys
 import json
 import argparse
+import sys
 from pathlib import Path
+
+try:  # 中文 Windows 控制台默认 GBK，统一成 UTF-8 避免乱码
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
+except Exception:
+    pass
 from datetime import datetime
 from typing import Dict, List, Any, Optional
 
@@ -27,6 +34,9 @@ class RuleManager:
             "account": self.rules_dir / "account_rules.json",
             "ip": self.rules_dir / "ip_rules.json",
             "webshell": self.rules_dir / "webshell_rules.json",
+            "persistence": self.rules_dir / "persistence_rules.json",
+            "injection": self.rules_dir / "injection_rules.json",
+            "lateral": self.rules_dir / "lateral_movement_rules.json",
             "historical": self.rules_dir / "historical_findings.json"
         }
         
@@ -255,14 +265,14 @@ class RuleManager:
     def _save_rules(self, rule_type: str, rules: list):
         """保存规则到文件"""
         rule_file = self.rule_files[rule_type]
-        with open(rule_file, 'w', encoding='utf-8') as f:
+        with open(rule_file, 'w', encoding='utf-8-sig') as f:
             json.dump(rules, f, ensure_ascii=False, indent=2)
             
     def _load_rules(self, rule_type: str) -> list:
         """从文件加载规则"""
         rule_file = self.rule_files[rule_type]
         if rule_file.exists():
-            with open(rule_file, 'r', encoding='utf-8') as f:
+            with open(rule_file, 'r', encoding='utf-8-sig') as f:
                 return json.load(f)
         return []
         
@@ -335,7 +345,7 @@ class RuleManager:
             return
             
         try:
-            with open(source_file, 'r', encoding='utf-8') as f:
+            with open(source_file, 'r', encoding='utf-8-sig') as f:
                 new_rules = json.load(f)
                 
             existing_rules = self._load_rules(target_type)
@@ -377,7 +387,7 @@ class RuleManager:
         for rt in types_to_export:
             export_data[rt] = self._load_rules(rt)
             
-        with open(output_file, 'w', encoding='utf-8') as f:
+        with open(output_file, 'w', encoding='utf-8-sig') as f:
             json.dump(export_data, f, ensure_ascii=False, indent=2)
             
         print(f"[+] 规则已导出: {output_file}")
@@ -387,12 +397,12 @@ class RuleManager:
         historical_file = self.rule_files["historical"]
         
         # 加载当前发现
-        with open(current_findings_file, 'r', encoding='utf-8') as f:
+        with open(current_findings_file, 'r', encoding='utf-8-sig') as f:
             current = json.load(f)
             
         # 加载历史发现
         if historical_file.exists():
-            with open(historical_file, 'r', encoding='utf-8') as f:
+            with open(historical_file, 'r', encoding='utf-8-sig') as f:
                 historical = json.load(f)
         else:
             historical = {"findings": [], "ioc_library": {}}
@@ -443,7 +453,7 @@ class RuleManager:
             if path and path not in historical["ioc_library"]["paths"]:
                 historical["ioc_library"]["paths"].append(path)
                 
-        with open(historical_file, 'w', encoding='utf-8') as f:
+        with open(historical_file, 'w', encoding='utf-8-sig') as f:
             json.dump(historical, f, ensure_ascii=False, indent=2)
             
         print(f"\n[+] 历史记录已更新")

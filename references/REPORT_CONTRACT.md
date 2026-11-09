@@ -103,7 +103,7 @@
           },
           "event": { "type": "string" },
           "attck_id": { "type": "string" },
-          "confidence": { "type": "string", "enum": ["low", "medium", "high"] }
+          "confidence": { "type": "string", "enum": ["low", "medium", "high"] },
           "cause": { "type": "string", "description": "本事件的原因/前因" },
           "effect": { "type": "string", "description": "本事件导致的后果" },
           "chain_evidence": { "type": "string", "enum": ["time_overlap", "process_parent", "network_same_session", "file_same_hash", "none"] },

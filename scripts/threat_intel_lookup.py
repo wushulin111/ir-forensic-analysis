@@ -21,10 +21,30 @@ except Exception:
     pass
 
 
+PLACEHOLDER_PREFIX = "YOUR_"
+
+
+def _is_placeholder(key: str) -> bool:
+    """配置模板里的 YOUR_XXX_HERE 不是真 Key，必须当作未配置"""
+    return not key or key.startswith(PLACEHOLDER_PREFIX)
+
+
 def load_config() -> dict:
-    config_path = Path(__file__).parent.parent / "config" / "threat_intel.json"
-    with open(config_path, "r", encoding="utf-8") as f:
+    """读取情报配置；缺失时回退 example（免费源仍可用），占位符视为未配置"""
+    base = Path(__file__).parent.parent / "config"
+    config_path = base / "threat_intel.json"
+    if not config_path.exists():
+        example = base / "threat_intel.json.example"
+        if example.exists():
+            print("[!] 未找到 config/threat_intel.json，使用 example 模板（仅免费源可用）")
+            config_path = example
+        else:
+            return {"sources": []}
+    with open(config_path, "r", encoding="utf-8-sig") as f:
         config = json.load(f)
+    for source in config.get("sources", []):
+        if _is_placeholder(source.get("api_key", "")):
+            source["api_key"] = ""
     # API Key 优先从环境变量补充，避免明文写死在配置里
     for source in config.get("sources", []):
         env_key = source.get("env_key", "")

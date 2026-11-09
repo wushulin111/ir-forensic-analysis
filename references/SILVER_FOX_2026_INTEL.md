@@ -18,6 +18,10 @@
 | 2026-07-29 | CNCERT 公开征集银狐威胁线索 | 国家层面收集样本/情报，安全厂商协同 |
 | 2026-07-31 | CN-SEC IOC 分享 | 30 个已解码 C2/投递域名 |
 | 2026-08-04 | 火绒趋势分析 | 每日境内肉鸡 IP 峰值超 1.7 万，AI 批量造毒，攻击向境外扩展 |
+| 2026-09-02 | FreeBuf 实战复盘 | 伪装"VPN 加速器"安装包，安装即投毒；用两个伪装成微软系统任务的计划任务实现登录自启 |
+| 2026-10-25 | CCTGA 银狐专项（镜昙 G02） | 团伙级深度分析，披露样本 SHA256 与域名 `weqt588.club` |
+| 2026-11-02 | CCTGA 银狐专项（TOP20） | 披露控制规模最大的 20 个恶意资产，含 `local72.mlcrosoft.my`、`xssx.sumucompanyuo.com`、`104.143.42.1` |
+| 2026-11-05 | 微步云沙箱 | SilverFox 部署 ValleyRAT 多阶段加载并植入内核 Rootkit，`\Drivers` 下每日轮换路径规避检测 |
 
 ## 二、核心情报源（建议订阅）
 
@@ -38,6 +42,16 @@
 | CN-SEC | https://cn-sec.com/ | 每日 | 国内安全社区 IOC 分享 |
 | Nextron（THOR） | https://www.nextron-systems.com/ | 按事件 | YARA 规则与 C2 |
 | 腾讯文档【开源恶意域名情报库】 | https://docs.qq.com/sheet/DSFNqd2JTZG5sa1ZV?tab=BB08J2 | 实时 | 社区共享挖矿/勒索/银狐恶意域名库，本次已同步 1390 个域名 |
+| **Detect-DefenseLab/silverfox-ioc** | https://github.com/Detect-DefenseLab/silverfox-ioc | 不定期 | 威胁狩猎确认的银狐域名全集（26,656 条，2026-09-03），可直接并入 ioc_library |
+| **CCTGA「银狐」专项（RedQueen）** | https://redqueen.tj-un.com:57788/ | 每月/批次 | 官方专项披露的恶意域名/IP/哈希（需申请账号） |
+| **CNCERT 银狐专项** | https://www.cert.org.cn/ | 不定期 | 官方通报批次，线索邮箱 silverfox@cert.org.cn |
+| 微步云沙箱攻击事件 | https://s.threatbook.com/blog/attack/ | 每日 | 单条攻击链完整 IOC |
+| tria.ge（Hatching Triage） | https://tria.ge/ | 实时 | ValleyRAT 家族样本行为与 IOC |
+| Malpedia（ValleyRAT） | https://malpedia.caad.fkie.fraunhofer.de/details/win.valley_rat | 按事件 | 家族卡片、YARA 参考 |
+| 腾讯安全威胁情报中心 RSS | https://wechat2rss.xlab.app/feed/034265b14906a59ef7cf1fcbd56699b54a696094.xml | 每日 | 银狐预警当天可达 |
+| SystemTwo Security | https://systemtwosecurity.com/intel-exchange/ | 按事件 | Operation Phnom Penh、日本制造业 BYOVD |
+| Gurucul Threat Research | https://partner.gurucul.com/articles/ThreatResearch/ | 按事件 | ValleyRAT 伪装已签名广告软件 |
+| GitHub SilverFox KQL 规则 | https://github.com/azdabat/Novel-Tradecraft-Research-Emerging-Attack-Ecosystems | 持续 | Sentinel 检测规则（侧加载→BYOVD→窃凭据） |
 
 ## 三、2026 新增关键 IOC
 
@@ -81,6 +95,13 @@
 - 若发现 `svchost.exe` 等系统进程异常，对比进程树、父进程、命令行与签名
 
 ## 五、如何保持更新
+
+**自动化**（脚本已内置）：
+```bash
+# 从文本/JSON 提取并合并，带来源与日期，支持预览
+python scripts/update_silver_fox_iocs.py --from-file new_iocs.txt --source CCTGA --date 2026-11-02 --dry-run
+```
+> abuse.ch 系（ThreatFox/MalwareBazaar/URLhaus）2025 年起需要免费 Auth-Key；申请后在 `config/threat_intel.json` 配置后即可自动拉取。
 
 1. 每日：检查 ThreatFox `SilverFox` 标签、MalwareBazaar `ValleyRAT` 签名，拉取新增样本哈希与 C2 域名
 2. 每周：查看微步/奇安信/火绒/瑞星/绿盟等国内厂商报告，提取新行为特征

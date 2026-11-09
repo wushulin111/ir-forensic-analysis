@@ -1,4 +1,69 @@
 # 变更记录
+## ir-forensic-analysis v4.5.6 / IR_Collect v5.4.0 (2026-11-05)
+
+**当前发布：以实际二进制为准**
+
+采集器：
+- 默认即深度模式，取消快速快照档位
+- 新增 `-CaptureDeletedProcessMemory`：非常驻进程全内存转储（MiniDumpWithFullMemory），默认关闭
+- 新增 `-RecoverClearedLogs`：卷影副本恢复已清空事件日志，默认关闭
+- 新增输出：`services_detail.csv`、`startup_folder.csv`、`security_key_events.csv`、`usb_devices.txt`、`defender_exclusions.txt`、`powershell_history.txt`、`tasks_xml_index.csv`、`run_all_users.txt`、`interesting_files.csv`
+- ZIP 生成后校验条目数再清理原始目录
+- 修复独立 `.ps1` 非管理员启动丢参数
+
+老系统采集脚本（新增）：
+- 新增 `assets/IR_Collect_PS2_GUI(老系统).exe`：PowerShell 2.0/3.0 兼容的精简采集器，面向 Server 2003/2008、Windows 7 等装不上 PowerShell 4+ 的机器
+- 同步提供源码 `assets/IR_Collect_PS2.ps1`（265 行，全程 PS2 语法：不使用 `Get-CimInstance`、`[pscustomobject]`、`$PSScriptRoot`、`Get-WinEvent`）
+- 能力为 v5.4 的子集：不含进程名仿冒、打包器检测、远控端口、COM/DLL 劫持、SAM 克隆、隐藏账号、勒索扩展名/勒索信扫描、IIS/Web、浏览器取证、4104 脚本块
+- 输出为目录形式（不压缩、不生成 SHA256），需现场人工补哈希
+- 已知限制：脚本末尾 `Get-ChildItem -File` 属于 PS3+ 参数，真 PS2 环境下 `file_manifest.csv` 会为空；XP/2003 无 `wevtutil`，事件日志采不到
+
+分析引擎 v2.2：
+- 支持读取 CSV（此前只读 txt/log，采集器主要输出被忽略）
+- 补齐第 8-11 维：高级对抗（IOC 库匹配）、仿冒签名、打包器、勒索家族识别
+- 输出 Schema v2 机器可读摘要（`report_summary.json` + 报告内 JSON 块）与覆盖率表
+- 规则正则非法时跳过该规则而非中断整轮分析
+- 持久化分析支持"键名行 + 值行"组合匹配
+- `--update-rules` 默认关闭，规则库只读
+
+情报库更新（2026-11-05）：
+- `rules/ioc_library.json`：域名 1918→28886、IP 414→451、哈希 45→51（MD5 44 + SHA256 7）、释放路径 207→546，`last_updated` = 2026-11-05
+- 主要来源：Detect-DefenseLab/silverfox-ioc 公开数据集（26,656 条域名，2026-09-03）、CCTGA 银狐专项 TOP20（2026-11-02）、cn-sec 批次披露（2026-11-03）、山西网信 CCTGA 第六批（2026-10-15）、奇安信 DeepSeek 仿冒拓线（2026-08-13）、Gurucul 印度税务活动、微步云沙箱攻击事件、看雪样本分析
+- 新增 `scripts/update_silver_fox_iocs.py`：从文本/JSON/URL 提取 IOC 并合并入库，记录来源与日期，支持 `--dry-run`
+- 分析器 IOC 匹配改为 token 交集：28,886 条域名下整包分析耗时从 93.6s 降到 7.0s
+- 修复 `silver_fox_rules.json` 4 处重复 `rule_id`：SFOX-0020 撞号改为 SFOX-0044；SFOX-0024/0025/0026 为同号分批规则已合并（规则数 43→40）
+- 修复 IOC 库中 `27.124.21[.131]` 防混淆写法，规范为 IP `27.124.21.131`
+- 修复哈希匹配缺陷：库中 44 条为 MD5，分析器此前只比对 SHA256 永远不命中；现按长度同时匹配 MD5/SHA256
+- 修复 `.locked` 被三家族共用导致误归属，现要求同时命中勒索信
+- 修复 `rules_updated.json` 1 条重复 `rule_id`
+
+文档与规则：
+- 修复 `persistence_rules.json` 中 2 条非法正则（PERS-0020/0021）
+- 修复 5 个 YARA 文件共 13 处 unreferenced string，全部可编译
+- SKILL.md 去除控制字符污染、修复代码围栏、维度编号补至 11、Linux 路径对齐 who.sh 实际输出
+- README/使用说明版本号、规则数量（43 条 / 1918 域名）、评分体系与代码统一
+
+## ir-forensic-analysis v4.5.5 / IR_Collect v5.3.6 (2026-09-02) —— 文档先行，未发布二进制
+**完整功能单进程低误报封装**
+- 保留 RWX 内存扫描、注册表 Hive、VSS、深度文件扫描、白加黑与历史事件等全部取证能力
+- GUI 与采集器改为同一 x64 进程内调用，不再向 `%TEMP%` 释放 `IR_Collect_v5.3.5.ps1`
+- 移除 GUI 的 `powershell.exe -ExecutionPolicy Bypass -File ...` 子进程链
+- Tailscale 定向规则改为进程内内置，不再释放临时 JSON；独立 PS1 仍可读取外部 `config/targets`
+- GUI 与采集器双重限制 `ScanDepth` 为 1-8，并返回明确的采集完成状态
+- EXE 与脚本版本统一为 v5.3.6 / 5.3.6.0；构建器验证源码/规则指纹、单进程入口和旧落地资源缺失
+- 构建器新增可选 Authenticode 证书指纹参数；无证书构建明确保持 `NotSigned`
+
+## ir-forensic-analysis v4.5.4 / IR_Collect v5.3.5 (2026-09-02) —— 文档先行，未发布二进制
+**白加黑 / DLL 侧载证据链增强**
+- 新增父子进程信任链 `process_tree_enriched.csv` 和组合告警 `white_black_process_alerts.csv`
+- 新增加载模块哈希/签名清单 `loaded_modules.csv` 和 `white_black_module_alerts.csv`
+- 新增 Security 4688、Sysmon 1/7 规范化 CSV 与 `white_black_history_alerts.csv`，覆盖已退出进程和历史模块加载
+- 采用多信号风险分，单个未签名文件不直接定性；强签名失败优先升级
+- 修复独立脚本非管理员提权时未携带原参数的问题
+- GUI、内嵌采集器与文件版本统一为 v5.3.5 / 5.3.5.0
+- 新增 `Build-IR_Collect_GUI.ps1`，编译后校验内嵌采集脚本及 Tailscale 规则 SHA-256
+- 修复 `persistence_rules.json` 与 `REPORT_CONTRACT.md` 的格式错误
+
 ## IR_Collect v5.3.4 (2026-08-27)
 **Windows 采集脚本 PS4 兼容版**
 - 兼容 PowerShell 4.0+（Server 2012 / 2012 R2）

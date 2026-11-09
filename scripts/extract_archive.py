@@ -13,6 +13,48 @@ import shutil
 from pathlib import Path
 
 
+def _safe_member_path(base: Path, member_name: str):
+    """防止 zip-slip / tar 路径穿越：成员必须落在 base 目录内。
+
+    取证包来自可能已被入侵的主机，解压前必须校验成员路径，
+    否则 `..\\..\\Startup\\x.lnk` 这类条目会被写到输出目录之外。
+    """
+    target = (base / member_name).resolve()
+    try:
+        target.relative_to(base.resolve())
+    except ValueError:
+        print(f"[!] 跳过越界成员: {member_name}")
+        return None
+    return target
+
+
+def _safe_extract_zip(zf, dest: Path):
+    skipped = 0
+    for info in zf.infolist():
+        if _safe_member_path(dest, info.filename) is None:
+            skipped += 1
+            continue
+        zf.extract(info, path=dest)
+    return skipped
+
+
+def _safe_extract_tar(tf, dest: Path):
+    skipped = 0
+    members = []
+    for m in tf.getmembers():
+        if _safe_member_path(dest, m.name) is None:
+            skipped += 1
+            continue
+        if m.issym() or m.islnk():
+            # 符号链接/硬链接同样可能指向目录外
+            if os.path.isabs(m.linkname) or ".." in Path(m.linkname).parts:
+                skipped += 1
+                continue
+        members.append(m)
+    tf.extractall(path=dest, members=members)
+    return skipped
+
+
 def extract_tar_gz(archive_path: str, output_dir: str) -> dict:
     """
     解压 tar.gz 文件
@@ -38,7 +80,9 @@ def extract_tar_gz(archive_path: str, output_dir: str) -> dict:
         
         # 解压文件
         with tarfile.open(archive_path, 'r:gz') as tar:
-            tar.extractall(path=extract_path)
+            skipped = _safe_extract_tar(tar, extract_path)
+            if skipped:
+                print(f"[!] 已跳过 {skipped} 个越界/可疑成员")
         
         result["success"] = True
         result["extracted_path"] = str(extract_path)
@@ -83,7 +127,9 @@ def extract_zip(archive_path: str, output_dir: str) -> dict:
         
         # 解压文件
         with zipfile.ZipFile(archive_path, 'r') as zip_ref:
-            zip_ref.extractall(path=extract_path)
+            skipped = _safe_extract_zip(zip_ref, extract_path)
+            if skipped:
+                print(f"[!] 已跳过 {skipped} 个越界成员")
         
         result["success"] = True
         result["extracted_path"] = str(extract_path)

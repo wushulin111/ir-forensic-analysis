@@ -33,7 +33,11 @@ IR_HOSTNAME_TIMESTAMP/
 │   ├── process_detail.txt          → 进程详情（路径/命令行/父PID）
 │   ├── process_full.txt            → 进程全量信息
 │   ├── process_tree.csv            → 进程树（父子关系）
-│   ├── process_modules.csv         → 进程加载DLL（ntdll重映射检测）
+│   ├── process_tree_enriched.csv   → 父子进程签名/哈希/命令行信任链（v5.3.5+）
+│   ├── white_black_process_alerts.csv → 白加黑进程链复核清单（v5.3.5+）
+│   ├── loaded_modules.csv          → 实际加载 DLL/模块的哈希、签名与宿主关联（v5.3.5+）
+│   ├── white_black_module_alerts.csv → DLL 侧载/签名链异常复核清单（v5.3.5+）
+│   ├── process_modules.csv         → RWX 内存区与映像映射（内存注入检测）
 │   ├── sessions.txt                → 终端会话
 │   ├── net_sessions.txt            → 网络会话
 │   └── net_use.txt / net_share.txt → 网络映射/共享
@@ -82,6 +86,8 @@ IR_HOSTNAME_TIMESTAMP/
 │   ├── ..._PowerShell_Operational.evtx / ..._Sysmon_Operational.evtx
 │   ├── ..._LocalSessionManager.evtx / ..._RdpCoreTS.evtx
 │   ├── powershell_scriptblock.txt / security_key_events.csv / rdp_sessions.txt
+│   ├── process_creation_4688.csv / sysmon_process_create.csv → 历史进程创建（v5.3.5+）
+│   ├── sysmon_image_load.csv / white_black_history_alerts.csv → 历史模块加载与白加黑告警（v5.3.5+）
 │
 ├── 7_web/                          # [Web/IIS]
 │   ├── applicationHost.config / iis_log_files.csv

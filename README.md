@@ -3,18 +3,44 @@
 > 应急响应取证分析 Skill — 静态取证包深度分析，覆盖 11 大检测维度，支持多源威胁情报自动交叉分析 + MITRE ATT&CK 映射 + 因果链攻击路径复盘
 
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
-[![Version](https://img.shields.io/badge/version-5.3.4-green)](CHANGELOG.md)
+[![Skill](https://img.shields.io/badge/skill-4.5.5-blue)](CHANGELOG.md)
+[![Collector](https://img.shields.io/badge/collector-5.4.0-green)](CHANGELOG.md)
 
 ## 简介
 
 `ir-forensic-analysis` 是一个面向应急响应场景的自动化取证分析工具集，包含：
 
 - **分析引擎** — SKILL.md 驱动的 LLM 11 维深度分析
-- **Windows 采集脚本** — `IR_Collect_v5.3.ps1`（默认快照 + `-DeepForensic` 深度取证 + `-Target` 定向采集，PS4 兼容）/ `IR_Collect_v5.3_GUI.exe`（自包含中文选项弹窗版），管理员运行
+- **Windows 采集脚本** — `IR_Collect_v5.4_GUI.exe` / `IR_Collect_v5.4.ps1`（默认深度取证，含 `-Target`、内存转储、日志恢复，PS4 兼容）+ `IR_Collect_PS2_GUI(老系统).exe`（PowerShell 2.0 精简版），管理员运行
 - **Linux 采集脚本** — `who.sh`（司稽 v8.1，sudo 运行）
 - **macOS 采集脚本** — `mac_collect.sh` v2.1（兼容 10.15+ / Intel+Apple Silicon，覆盖系统、网络、进程、持久化、账号、浏览器、日志、安全配置）
 - **威胁情报模块** — 多源自动交叉分析（微步/OTX/URLhaus/VT/CVERC/AbuseIPDB/Pulsedive/URLScan/ThreatFox 等）
-- **检测规则库** — JSON + YARA，含银狐专项 34 条规则 / 5265 恶意域名
+- **检测规则库** — JSON + YARA，含银狐专项 40 条规则 / 28886 恶意域名 / 451 IP / 51 哈希
+
+## v5.4 更新说明（当前发布）
+
+- 采集器默认即深度模式（Amcache/Shimcache/BAM/Prefetch/SRUM/跳转列表/扩展日志/浏览器深层），不再提供快速快照档位
+- 新增 `-CaptureDeletedProcessMemory`：对非常驻系统进程做全内存转储（`MiniDumpWithFullMemory`），带 `ImageDeleted` 标记，默认关闭
+- 新增 `-RecoverClearedLogs`：从卷影副本恢复已清空的事件日志，默认关闭
+- 新增输出：`services_detail.csv`、`startup_folder.csv`、`security_key_events.csv`（4624/4625/4672/4688/4698/4720/4726/1102）、`usb_devices.txt`、`defender_exclusions.txt`、`powershell_history.txt`、`tasks_xml_index.csv`、`run_all_users.txt`、`interesting_files.csv`
+- ZIP 生成后先校验条目数 > 0，再清理原始目录，避免压缩失败丢证据
+- 修复独立 `.ps1` 非管理员启动时丢参数的问题
+- **注意**：仍会释放 `%TEMP%\IR_Collect_v5.4.ps1` 并以 `-ExecutionPolicy Bypass` 子进程执行；下文的 5.3.5/5.3.6 条目为文档先行、未随二进制发布
+
+## v5.3.6（文档先行，未发布二进制）
+
+原计划把 GUI 与采集器合并为单进程、不落地临时脚本。该改动**未进入 v5.4 二进制**，此处保留记录以免与历史文档冲突。
+
+## v5.3.5 更新说明
+
+本次发布重点补齐 Windows “白加黑/DLL 侧载”容易漏报的证据链：
+
+- 新增 `process_tree_enriched.csv` 与 `white_black_process_alerts.csv`，关联父子进程路径、命令行、SHA-256、双方签名和风险分
+- 新增 `loaded_modules.csv` 与 `white_black_module_alerts.csv`，记录签名宿主实际加载的 DLL/模块及其哈希、签名和可写路径属性
+- 规范化 Security 4688、Sysmon 1/7 为 CSV，并生成 `white_black_history_alerts.csv`，覆盖采集前已经退出的进程和历史模块加载
+- 风险分采用多信号组合；单个未签名文件不直接定性为入侵，`HashMismatch`/`NotTrusted` 等强签名失败优先升级
+- 修复独立 `.ps1` 非管理员启动时丢失参数的问题；GUI 与内嵌采集器统一为 v5.3.5
+- 新增可复现构建脚本 `assets/Build-IR_Collect_GUI.ps1`，编译时校验内嵌采集器与 Tailscale 规则哈希
 
 ## v5.3.4 更新说明
 
@@ -84,37 +110,37 @@ python scripts/analyze_forensics.py ./extracted/IR_HOSTNAME_TIMESTAMP/ -r ./rule
 
 | 脚本 | 定位 | 什么情况用 |
 |------|------|-----------|
-| `IR_Collect_v5.3.ps1` | 默认快照采集，可选 `-DeepForensic` 深度取证 | 常规应急响应默认使用；重大事件、需要离线痕迹/扩展日志时加 `-DeepForensic` |
-| `IR_Collect_v5.3_GUI.exe` | 自包含图形化选项启动器（v5.3.4） | 现场不想记命令时，只复制这一个 exe 到目标电脑双击即可，按需求勾选采集模式 |
+| `IR_Collect_v5.4_GUI.exe` | 图形化采集器（v5.4.0，默认即深度） | 现场不想记命令时，只复制这一个 exe 双击即可 |
+| `IR_Collect_v5.4.ps1` | 采集器源码（与 exe 内嵌脚本一致） | 需要审计/改参数/被杀软拦截时直接跑脚本 |
+| `IR_Collect_PS2_GUI(老系统).exe` | PowerShell 2.0 兼容的**精简版** | 仅用于 Server 2003/2008、Win7 等跑不了 v5.4 的系统 |
 
-> v5.1/v5.2 的能力已全部合并进 v5.3（含 `-Target` 定向采集），GitHub 发布版只维护 v5.3 一个脚本。
+> 自 v5.4 起采集器**默认就是深度模式**，不再提供"快速快照"档位。
 
 ```powershell
-# Windows 默认快速快照（管理员 PowerShell）
-powershell.exe -ExecutionPolicy Bypass -File assets/IR_Collect_v5.3.ps1
+# 图形化（推荐）
+assets\IR_Collect_v5.4_GUI.exe
 
-# 图形化选项版（自包含单文件，双击运行，按需勾选）
-assets/IR_Collect_v5.3_GUI.exe
+# 脚本方式（管理员 PowerShell），默认即深度
+powershell.exe -ExecutionPolicy Bypass -File assets\IR_Collect_v5.4.ps1
 
-# 深度取证：离线痕迹 + 扩展日志 + 浏览器深库
-powershell.exe -ExecutionPolicy Bypass -File assets/IR_Collect_v5.3.ps1 -DeepForensic
+# 追加敏感数据（SAM/SYSTEM/SECURITY/SOFTWARE hive、浏览器凭据库）
+powershell.exe -ExecutionPolicy Bypass -File assets\IR_Collect_v5.4.ps1 -IncludeSensitive
 
-# 深度取证 + 敏感数据（SAM/SYSTEM hive、浏览器凭据库）
-powershell.exe -ExecutionPolicy Bypass -File assets/IR_Collect_v5.3.ps1 -DeepForensic -IncludeSensitive
+# 进程内存转储（默认关闭；生成较大 dmp，含敏感数据）
+powershell.exe -ExecutionPolicy Bypass -File assets\IR_Collect_v5.4.ps1 -CaptureDeletedProcessMemory
 
-# 大磁盘/时间紧：跳过耗时文件扫描
-powershell.exe -ExecutionPolicy Bypass -File assets/IR_Collect_v5.3.ps1 -SkipFileScan
+# 从卷影副本恢复已清空的事件日志
+powershell.exe -ExecutionPolicy Bypass -File assets\IR_Collect_v5.4.ps1 -RecoverClearedLogs
 
-# 定向采集：全量采集 + 针对 Tailscale 定向采集（v5.3 保留 v5.2 能力）
-powershell.exe -ExecutionPolicy Bypass -File assets/IR_Collect_v5.3.ps1 -Target tailscale
-
-# 无规则文件时按关键词兜底扫描
-powershell.exe -ExecutionPolicy Bypass -File assets/IR_Collect_v5.3.ps1 -Target anyapp
+# 定向采集
+powershell.exe -ExecutionPolicy Bypass -File assets\IR_Collect_v5.4.ps1 -Target tailscale
 ```
 
-> `IR_Collect_v5.3.ps1` 默认快速快照；`-DeepForensic` 追加 `0_offline/`、`6_logs/extended/`、`browser_artifacts/deep/`。`-IncludeSensitive` 默认关闭，避免采集 SAM/SYSTEM hive 与浏览器凭据库。`-SkipFileScan`、`-IncludeSystemDirs`、`-ScanDepth N`（1-8）可控制文件扫描耗时。传入 `-Target 名称` 会在全量采集基础上追加目标定向采集。
+> `-SkipFileScan`、`-IncludeSystemDirs`、`-ScanDepth N`（1-8）控制文件扫描耗时。
 
-**推荐用法（现场快速采集）**：把 `IR_Collect_v5.3_GUI.exe` 复制到目标 Windows 电脑，双击运行即可。exe 已内嵌完整采集脚本和 Tailscale 定向规则，不需要再携带 `.ps1`；Win10/11 自带 PowerShell 5.1，无需安装环境。首次运行会弹 UAC 管理员确认，属正常；PS2EXE 打包程序可能被杀软误报，建议加入白名单。
+**已知实现细节（以代码为准）**：v5.4 仍会把内嵌采集脚本释放到 `%TEMP%\IR_Collect_v5.4.ps1`，并用 `powershell.exe -NoProfile -ExecutionPolicy Bypass -File` 子进程执行——5.3.6 文档描述的"单进程、不落地"并未进入 v5.4。该 exe 未签名，分发前请核对 SHA256。
+
+构建脚本 `Build-IR_Collect_GUI.ps1` **未随仓库发布**，需要自行用 ps2exe 打包。
 
 ```bash
 # Linux（root）
@@ -162,7 +188,7 @@ cp config/threat_intel.json.example config/threat_intel.json
 | 5 | Webshell | T1505, T1059, T1562 |
 | 6 | 内存注入（16条规则 + JIT 误报过滤） | T1055, T1620 |
 | 7 | 横向移动 | T1021, T1047, T1550 |
-| 8 | 高级对抗（银狐 34 条规则） | T1562, T1055, T1014 |
+| 8 | 高级对抗（银狐 40 条规则） | T1562, T1055, T1014 |
 | 9 | 进程名仿冒 + 数字签名 | T1036 |
 | 10 | 打包器/载荷（PyInstaller/PyArmor/UPX） | T1027 |
 | 11 | 供应链/勒索（8族勒索家族识别） | T1486, T1490 |
@@ -196,11 +222,13 @@ ir-forensic-analysis/
 ├── 使用说明.md                 # 详细文档
 ├── CHANGELOG.md                # 变更记录
 ├── assets/                     # 采集脚本
-│   ├── IR_Collect_v5.3.ps1    # Windows 默认快照 + 深度取证（-DeepForensic）
-│   ├── IR_Collect_v5.3_GUI.exe # Windows 自包含图形化选项启动器（自动提权）
-│   ├── IR_Collect_GUI_v5.3.ps1 # GUI 启动器源码（ps2exe 重新打包用）
-│   ├── who.sh                  # Linux 采集
-│   └── mac_collect.sh          # macOS 采集
+│   ├── IR_Collect_v5.4_GUI.exe    # Windows 图形化采集器（v5.4.0，默认深度）
+│   ├── IR_Collect_v5.4.ps1        # 采集器源码（与 exe 内嵌脚本一致）
+│   ├── IR_Collect_GUI_v5.4.ps1    # GUI 启动器源码（ps2exe 重新打包用）
+│   ├── IR_Collect_PS2_GUI(老系统).exe  # PowerShell 2.0 兼容精简版
+│   ├── IR_Collect_PS2.ps1         # PS2 版源码
+│   ├── who.sh                     # Linux 采集（司稽 v8.1）
+│   └── mac_collect.sh             # macOS 采集（v2.1）
 ├── config/
 │   ├── threat_intel.json.example  # 情报配置模板
 │   └── targets/                    # 定向采集规则（tailscale.json 示例）
@@ -219,12 +247,38 @@ ir-forensic-analysis/
 
 ## 威胁评分
 
-| 分数 | 等级 | 处置 |
+评分 = Σ（维度权重 × 严重等级分），与 `scripts/analyze_forensics.py` 的实现一致：
+
+| 维度 | 权重 |
+|------|------|
+| 网络外联(C2) / 高级对抗 / 勒索 / 内存注入 | 4 |
+| 可疑进程 / 持久化 / Webshell / 横向 / 仿冒签名 / 打包器 / 供应链 | 3 |
+| 异常账号 | 2 |
+
+严重等级分：Critical 3 / High 2 / Medium 1 / Low 0.5
+
+| 总分 | 等级 | 处置 |
 |------|------|------|
-| 0-20 | 🟢 低危 | 观察 |
-| 21-50 | 🟡 中危 | 24h 排查 |
-| 51-80 | 🟠 高危 | 4h 响应 |
-| 81+ | 🔴 危急 | 15min 响应 |
+| ≥25 | 🔴 危急 | 立即隔离，全量排查 |
+| 15-24 | 🟠 高危 | 优先处置，限制网络 |
+| 5-14 | 🟡 中危 | 调查确认，针对性处理 |
+| <5 | 🟢 低危 | 记录观察，持续监控 |
+
+## PS2 兼容版（老系统）
+
+`assets/IR_Collect_PS2_GUI(老系统).exe` 是 PowerShell 2.0 语法子集编写的精简采集器（源码 `assets/IR_Collect_PS2.ps1`，265 行），用于跑不了 v5.4 的老系统。
+
+| 操作系统 | 自带 PowerShell | 可用性 |
+|---------|----------------|--------|
+| Windows 7 / Server 2008 R2 | 2.0 | ✅ 主目标，开箱即用 |
+| Windows 8 / 2012 / 10 / 11 | 3.0-5.1 | ✅ 可运行，但应优先 v5.4 |
+| Vista / Server 2008（需装 PS2） | 1.0 | ⚠️ 部分可用 |
+| Windows XP / Server 2003（需装 PS2） | 无 | ⚠️ 无 `wevtutil`，事件日志采不到 |
+
+**能力差异**：无进程名仿冒、打包器检测、远控端口、COM/DLL 劫持、SAM 克隆、隐藏账号、**勒索扩展名/勒索信扫描**、IIS/Web、浏览器取证、4104；**不打包、不生成 SHA256**。
+
+**已知缺陷**：脚本末尾 `Get-ChildItem $dir -Recurse -File` 的 `-File` 是 PowerShell 3.0+ 参数，在真 PS2 上会报错，导致 `file_manifest.csv` 为空；跑完请自行补哈希。
+
 
 ## License
 
