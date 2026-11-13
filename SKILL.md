@@ -2,37 +2,88 @@
 name: ir-forensic-analysis
 description: >
   应急响应取证分析。自动解压分析 Linux/Windows 取证包（IR.tar.gz / IR.zip），
-  覆盖11大检测维度（含打包器/多阶段载荷识别、勒索家族分类检测、供应链/第三方运维、高级对抗检测：银狐专项+远控对抗），
+  覆盖 14 个检测维度（含浏览器取证、计划任务/注册表、EVTX 事件日志、Prefetch/JumpList/Amcache 执行痕迹），以及打包器/多阶段载荷、勒索家族、供应链、高级对抗（银狐专项+远控对抗），
   映射MITRE ATT&CK，因果链推理攻击路径复盘，生成含威胁评分、IOC摘要、勒索家族识别与因果链时间线的应急报告。
 license: MIT
 metadata:
   author: OpenClaw
-  version: "4.5.5"
+  version: "5.11.0"
   category: security-forensics
   language: zh-CN
 ---
 
 # 应急响应取证分析 Skill
 
-## 分析能力（11大检测维度）
+## 分析能力（14 个检测维度）
 
-| # | 维度 | 检测内容 | ATT&CK 覆盖 |
-|---|------|----------|-------------|
-| 1 | 可疑进程 | 异常路径/隐藏目录/已知恶意进程名/LotL滥用/进程注入指标/勒索加密进程 | T1059, T1218, T1564 |
-| 2 | 持久化机制 | 注册表Run键/计划任务/WMI事件订阅/启动文件夹/crontab/systemd/服务劫持 | T1547, T1053, T1546, T1543 |
-| 3 | 异常账号 | 隐藏账号/WMI交叉验证/ProfileList交叉验证/SAM克隆账号(F值对比)/空密码/UID=0后门 | T1136, T1078, T1548 |
-| 4 | 网络外联 | C2端口/DNS异常/CLOSE_WAIT累积/反向Shell/大流量外泄 | T1071, T1571, T1041, T1048 |
-| 5 | Webshell | 一句话木马/大马/内存马/杀软对抗/常见文件名 | T1505, T1059, T1562 |
-| 6 | 内存注入 | RWX区域/反射DLL/进程空心化/Beacon特征/无文件攻击 | T1055, T1620 |
-| 7 | 横向移动 | SMB/RDP/SSH扫描/PsExec/WMI远程/哈希传递/WinRM | T1021, T1047, T1550 |
-| 8 | 高级对抗 | 银狐专项(40条规则/28886域名/451IP/51哈希)+远控对抗：Unhooking致盲EDR/PoolParty注入/自编写驱动/白加黑/多阶段加载 | T1562, T1055, T1014 |
-| 9 | **进程名仿冒+签名** | 字符替换仿冒svch0st→svchost/Levenshtein官方名偏差/数字签名验证/哈希篡改 | T1036.005, T1036.002 |
-| 10 | **打包器/载荷** | **PyInstaller/PyArmor/UPX/Enigma检测/TEMP_MEI快照对比/多阶段加载识别(v4.2新增)** | T1027, T1059 |
-| 11 | **供应链/勒索** | **勒索家族分类识别(8族)+ESXi虚拟化勒索+NAS漏洞入侵+第三方运维盲区+Dwell Time评估+因果链攻击路径复盘** | T1486, T1490, T1195, T1133 |
+| # | 维度 | 数据来源 | 检测内容 | ATT&CK |
+|---|------|----------|----------|--------|
+| 1 | 可疑进程 | `process_tree.csv` / `tasklist.csv` / `process_authenticode.csv` | 异常路径、隐藏目录、恶意进程名、LotL 滥用、注入指标、勒索进程 | T1059, T1218, T1564 |
+| 2 | 持久化 | `Run.txt` / `schtasks.csv` / `services.txt` / `wmi_*.txt` | Run 键、计划任务、WMI 订阅、启动文件夹、服务劫持 | T1547, T1053, T1546, T1543 |
+| 3 | 异常账号 | `local_users.csv` / `SAM` 导出 / `profilelist.txt` | 隐藏账号、SAM 克隆、空密码、UID=0 后门 | T1136, T1078, T1548 |
+| 4 | 网络外联 | `netstat_*.txt` / `dns_cache.txt` | C2 端口、DNS 异常、CLOSE_WAIT 累积、反连、大流量外泄 | T1071, T1571, T1041 |
+| 5 | Webshell | `7_web/*` | 一句话/大马/内存马/杀软对抗/常见文件名 | T1505, T1059 |
+| 6 | 内存注入 | 进程转储 / `injection_*.txt` | RWX 区域、反射 DLL、进程镂空、Beacon 特征 | T1055, T1620 |
+| 7 | 横向移动 | 安全日志 / SMB/RDP 记录 | PsExec、WMI 远程、哈希传递、WinRM、扫描 | T1021, T1047, T1550 |
+| 8 | 高级对抗（银狐） | `ioc_library.json`（40 条规则 / 28,886 域名 / 451 IP / 51 哈希） | 银狐家族 IOC、Unhooking、PoolParty、自编写驱动、白加黑 | T1562, T1055, T1014 |
+| 9 | 仿冒签名 | `process_authenticode.csv` | 字符替换仿冒（svch0st）、Levenshtein 偏差、签名校验失败 | T1036.005, T1036.002 |
+| 10 | 打包器/载荷 | 节区/熵值、`temp_mei_*.csv` | PyInstaller、PyArmor、UPX、Enigma、多阶段加载 | T1027, T1059 |
+| 11 | 勒索/供应链 | 扩展名扫描、勒索信、服务与账号 | 8 族勒索识别、ESXi/NAS 专项、第三方运维盲区 | T1486, T1490, T1195 |
+| 12 | **浏览器取证** | `browser_artifacts/`（SQLite） | 历史、下载、书签、Cookie/登录、Favicons/Top Sites、IOC 命中 | T1217, T1071.001 |
+| 13 | **计划任务/注册表** | `tasks_xml/`、`*.reg`、Chromium `Bookmarks` | 任务命令分级、Run/服务/IFEO/Winlogon 劫持、书签 | T1053.005, T1547.001 |
+| 14 | **Windows 事件日志** | `*.evtx` | 登录失败/爆破成功、日志清除、服务安装、账号变更、可疑命令行、PS 编码执行 | T1110, T1070, T1059 |
 
-> 第10维「打包器/载荷」为 v4.2 新增，第11维「供应链/勒索」为 v3.0 新增，整合了勒索病毒家族深度检测、ESXi/NAS 专项、供应链入侵排查和因果链攻击路径复盘方法论。
+## 数据流与产物
 
-> 第8维「高级对抗」合并了银狐专项(40条规则/28886域名/451IP/51哈希)和远控对抗检测，用 `fox_tag`（银狐家族特征）和 `generic_rat_tag`（通用远控对抗）标签区分归属。
+```
+采集包(zip/tar.gz)
+   │  extract_archive.py（zip-slip 防护）
+   ▼
+解压目录 ──► parsers_registry.ensure()
+   │           ├─ browser    浏览器 SQLite（History/places/Bookmarks/Favicons/Top Sites）
+   │           ├─ artifacts  计划任务 XML / .reg / 书签
+   │           ├─ config     hosts / DNS / 防火墙 / Defender 排除 / BITS / COM 劫持 / BAM / 采集清单
+   │           ├─ accounts   账号表 / 隐藏账号 / net-WMI 交叉 / 管理员组
+   │           ├─ persistence_exports  Run / RunOnce / IFEO / Winlogon / Services
+   │           ├─ filesystem 可疑落盘 / 双扩展名 / 时间戳异常
+   │           ├─ srum       SRUM 按程序收发字节数
+   │           ├─ evtx       事件日志
+   │           ├─ prefetch   执行痕迹（MAM/XPRESS 解压）
+   │           ├─ jumplist   最近打开文件
+   │           └─ amcache    程序 / 文件 SHA1 / 驱动签名
+   ▼
+_derived/            ← 所有派生结果统一放这里，不动原始证据
+   ├─ manifest.json  ← 每个解析器的状态、耗时、摘要
+   ├─ browser/ artifacts/ config/ accounts/ persistence_exports/
+   ├─ filesystem/ srum/ evtx/ prefetch/ jumplist/ amcache/
+   ▼
+analyze_forensics.py → 14 维检测 → incident_report.md + report_summary.json（Schema v2）
+```
+
+- 单独重跑派生解析：`python scripts/parsers_registry.py <解压目录> [--only evtx,config] [--force]`
+- 旧布局（`_browser/`、`_evtx/` 等）仍可读取，`resolve_dir()` 自动回退
+
+## 降级矩阵（缺依赖时）
+
+| 维度 | 依赖 | 缺失时的行为 |
+|---|---|---|
+| 1–11 | 无（标准库） | 正常 |
+| 12 浏览器 | `sqlite3`（标准库） | 正常 |
+| 13 计划任务/注册表 | 无 | 正常 |
+| 14 EVTX | `evtx` | 跳过该维度，其余照常 |
+| Prefetch | `dissect.util` | 跳过 Prefetch 汇总 |
+| JumpList | `olefile` | 跳过 JumpList |
+| Amcache | `regipy` | 跳过 Amcache |
+
+安装：`pip install evtx regipy dissect.util olefile`（见 `requirements-optional.txt`）。
+
+## 性能档位
+
+| 档位 | 做法 | 实测（567 文件采集包） |
+|---|---|---|
+| 冷跑（首次解析全部产物） | 默认 | ~59s |
+| 热跑（`_derived/` 已存在） | 默认 | ~19s |
+| 快速（跳过重型解析） | `IR_SKIP_HEAVY=1` | ~12s |
 
 ---
 
@@ -417,7 +468,7 @@ mkdir -p /tmp/ir_extracted && cd /tmp/ir_extracted && unzip -o IR.zip
 
 ## 数据预处理增强（v3.4.0）
 
-> 在进入 9 维分析之前，先对原始数据进行一次预处理。这能极大提升分析效率，**不等同于跳过维度分析**——预处理的结果会注入到每个维度的检查中。
+> 在进入 14 维分析之前，先对原始数据进行一次预处理。这能极大提升分析效率，**不等同于跳过维度分析**——预处理的结果会注入到每个维度的检查中。
 
 ### ① 事件归一化（跨维度关联基础）
 
@@ -428,7 +479,7 @@ mkdir -p /tmp/ir_extracted && cd /tmp/ir_extracted && unzip -o IR.zip
 {"time":"2026-05-20T14:25:01","type":"network_connect","pid":6200,"local":"192.168.1.100:49157","remote":"45.33.32.156:6666","state":"ESTABLISHED","severity":"high"}
 ```
 
-**在 9 维分析中**，优先引用归一化事件，而不是从零读原始文件。例如分析维度1（可疑进程）时，直接看 timeline 中所有 `type=process_create` 的事件，而不是去 tasklist.csv 里逐行看。
+**在 14 维分析中**，优先引用归一化事件，而不是从零读原始文件。例如分析维度1（可疑进程）时，直接看 timeline 中所有 `type=process_create` 的事件，而不是去 tasklist.csv 里逐行看。
 
 > **如何做**：解包后，提取 process_tree.csv、netstat_ano.txt、powershell_scriptblock.txt 等关键文件，将相关信息拼成一张"事件表"。**不需要额外脚本**，LLM 直接在思考过程中完成。
 
@@ -530,7 +581,7 @@ Hash 查询：微步 → OTX → VT → CVERC → MalwareBazaar → ThreatFox �
 
 ### ⑤ 实体关联图（跨维度关联）
 
-> 不增加维度，但在分析过程中构建实体关联，辅助 9 维之间的因果推理。
+> 不增加维度，但在分析过程中构建实体关联，辅助各维度之间的因果推理。
 
 ```text
 进程: invoice.doc.exe(4568)
@@ -540,12 +591,12 @@ Hash 查询：微步 → OTX → VT → CVERC → MalwareBazaar → ThreatFox �
   └─ 文件: C:\Temp\beacon.dll
 ```
 
-**在 9 维分析中各维度引用**：
+**各维度引用方式**：
 - 维度1 看到 powershell.exe(6200) 可疑 → 去实体图看它的父进程是谁
 - 维度4 看到 45.33.32.156:6666 外联 → 去实体图看哪个进程连的
 - 维度7 看到 SMB 外联 → 去实体图看进程是谁衍生的
 
-> **不分步做**：归一化 → Sigma → 威胁情报 → 实体图 → 进入 9 维分析。所有预处理在 LLM 思考过程中完成，不需要额外脚本。
+> **不分步做**：归一化 → Sigma → 威胁情报 → 实体图 → 进入 14 维分析。所有预处理在 LLM 思考过程中完成，不需要额外脚本。
 
 ---
 

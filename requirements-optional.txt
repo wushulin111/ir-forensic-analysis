@@ -1,0 +1,6 @@
+# 可选：二进制取证解析（缺哪个就跳过对应维度）
+evtx>=0.7            # EVTX 事件日志（pyevtx-rs）
+regipy>=4.0          # Amcache.hve 等注册表 hive
+dissect.util>=3.0    # Prefetch MAM/XPRESS Huffman 解压
+olefile>=0.46        # Jump List（OLE 复合文档）
+dissect.esedb>=3.0    # SRUM（SRUDB.dat）ESE 数据库解析

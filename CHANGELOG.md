@@ -714,3 +714,219 @@ etstat_new_connections.txt，对比检测延时触发的 C2 外连
 ## v1.0.0 (2026-04-15)
 
 - 初始版本：5大检测维度
+
+## v5.5.0（2026-11-13）
+
+**新增第 12 维：浏览器取证（SQLite 解析）**
+
+### 新增
+- `scripts/analyze_browser.py`：解析 `browser_artifacts/` 下的 SQLite
+  - Chromium 系（Chrome/Edge/Brave/Opera/360SE/QQBrowser/Chromium/Vivaldi）：`urls` / `visits` / `downloads` / `keyword_search_terms`
+  - Firefox：`places.sqlite`（访问历史 + 书签）
+  - 兼容被占用/损坏的库（自动复制到临时目录，带 `-wal` / `-shm`）
+  - 时间戳换算：Chromium（1601 纪元微秒）/ Firefox（1970 纪元微秒）
+- 输出 `browser_history.csv` / `browser_downloads.csv` / `browser_bookmarks.csv` /
+  `browser_summary.json` / `browser_report.md`
+- 下载风险分级：可执行/脚本 > 安装包/宏文档 > 压缩包；临时/公共目录、浏览器 `danger_type`、
+  明文 HTTP 下载可执行文件会升级风险；命中 IOC 库域名直接标 critical
+- `analyze_forensics.py` 增加维度 12「浏览器取证」：优先解析浏览器库，再检测
+  IOC 命中 / 高危下载 / 历史为空，并计入 `report_summary.json` 的 findings
+
+### 修复
+- `actions` 字典缺少 `info` 键导致 `KeyError`（维度新增 info 级发现时触发）
+- `dimensions_complete` 不再写死 11，改为按 `dim_map` 动态输出
+
+### 实测（IR_DESKTOP-FJ8A0FE_20261113_144722）
+- 4 个浏览器库（Chrome/Edge/Firefox×2），历史 4,725 条、下载 832 条（高风险 156）、书签 20
+- 命中 1 条 IOC 域名（Firefox 历史），触发 critical 发现
+
+## v5.6.0（2026-11-13）
+
+**新增第 13 维：计划任务 / 注册表 / 书签解析**
+
+### 新增
+- `scripts/analyze_artifacts.py`
+  - 计划任务 XML（`3_persistence/tasks_xml/*`，UTF-16、无扩展名）：解析 URI / Command / Arguments /
+    UserId / 触发器，按"临时目录、编码执行、LOLBin 转发、脚本文件、通用解释器"分级
+  - 注册表导出（`*.reg`）：解析 924+ 条键值，标记 Run/RunOnce、Services ImagePath、
+    IFEO Debugger、Winlogon Shell/Userinit 的可疑指向
+  - Chromium 书签（`browser_artifacts/**/Bookmarks`，JSON 无扩展名）
+  - 输出 `scheduled_tasks.csv` / `registry_keys.csv` / `browser_bookmarks_extra.csv` /
+    `artifacts_summary.json` / `artifacts_report.md`，写到取证目录下的 `_artifacts/`
+- `analyze_forensics.py` 增加维度 13「计划任务/注册表/书签」，并自动在加载前完成解析
+
+### 修复
+- `f-string` 中的 `\{` 触发 SyntaxWarning
+
+### 实测（IR_DESKTOP-FJ8A0FE_20261113_144722）
+- 计划任务 26 个（medium 9 / low 17，无 high）
+- 注册表 924 条（本包为 userassist/muicache/runmru，无 Run 键）
+- 书签 180 条
+- 13 个维度全部覆盖，评分 34（critical）
+
+## v5.7.0（2026-11-13）
+
+**补齐四类二进制取证产物：EVTX / Prefetch / JumpList / Amcache**
+
+### 新增
+- `scripts/analyze_evtx.py`：解析 `.evtx`（pyevtx-rs）
+  - 关键事件：4624/4625/4688/4720/4732/7045/1102/4104/1116 等
+  - 检测：失败登录集中、失败后成功登录（同 user+IP、1 小时窗口、≥5 次失败）、
+    日志清除、可疑服务安装、创建账号、加入管理员组、可疑命令行、PowerShell 编码执行、Defender 告警
+  - 兼容三种 EventData 形态（Data 列表 / Data 单对象 / 平铺键值）与
+    `TimeCreated.#attributes.SystemTime`
+- `scripts/analyze_prefetch.py`：MAM/XPRESS Huffman 解压（dissect.util）后解析
+  - 可执行名、运行次数、最近 8 次运行时间、引用文件路径
+  - 风险：临时/用户目录、脚本解释器拉起
+- `scripts/analyze_jumplist.py`：OLE 复合文档（olefile）解析 DestList 与 LNK 流
+  - 最近访问文件路径 605 条、可疑位置标记
+- `scripts/analyze_amcache.py`：注册表 hive（regipy）解析 InventoryApplicationFile / File
+  - 程序名、路径、SHA1、时间；可疑路径标记
+- `analyze_forensics.py` 新增维度 14「Windows 事件日志」，并把 Prefetch/JumpList/Amcache
+  汇总进维度 13「计划任务/注册表/书签」
+- 重型解析可用 `IR_SKIP_HEAVY=1` 跳过
+
+### 实测（IR_DESKTOP-FJ8A0FE_20261113_144722）
+| 产物 | 数量 | 结果 |
+|---|---|---|
+| EVTX | 14 个文件 | 124,315 条记录，2,769 条关键事件，2 项检测 |
+| Prefetch | 240 个 | 全部解压成功，45 个可疑 |
+| JumpList | 147 个 | 605 条路径，158 条可疑位置 |
+| Amcache | 1 个 hive | 14,306 条，14,061 条带 SHA1，181 条可疑 |
+| 整体 | — | 14 维全覆盖，53 条发现，耗时 48s（原 18s） |
+
+### 依赖
+`pip install evtx regipy dissect.util olefile`（仅这四类解析需要，缺失时自动跳过）
+
+## v5.8.0（2026-11-13）
+
+**补齐浏览器站点缓存；Amcache 按真实结构重写**
+
+### 新增
+- `analyze_browser.py` 支持无扩展名的 SQLite 站点缓存：
+  - `Favicons`（`icon_mapping.page_url`）：历史被清空时仍能还原访问过的站点
+  - `Top Sites`（`top_sites`）：常访问站点与排序
+  - 输出 `browser_sites.csv`，并写入 `browser_summary.json` 的 `site_cache_count`
+
+### 修复 / 重构
+- `analyze_amcache.py` 原来假设 `InventoryApplicationFile` 下有 Name/Path，实测该键只有
+  `ProgramId`/`FileId`；改为按真实结构解析：
+  - `InventoryApplication`：程序名、版本、发布者、安装时间、安装目录（310 条）
+  - `InventoryApplicationFile`：FileId 作为 SHA1（14,306 条）
+  - `InventoryDriverBinary`：驱动名、厂商、**是否签名**（497 条）→ 未签名驱动可直接作为
+    BYOVD 线索
+  - 输出增加 `kind`（application/file/driver）、`signed` 列
+
+### 实测（IR_DESKTOP-FJ8A0FE_20261113_144722）
+| 项目 | 结果 |
+|---|---|
+| 站点缓存 | 6 个库 → `browser_sites.csv` |
+| Amcache | 程序 310 / 文件 14,306 / 驱动 497，可疑 25，未签名驱动 0 |
+| 全量分析 | 14 维，53 条发现，冷跑 67s |
+
+## v5.9.0（2026-11-13）
+
+**整体收口：解析器注册表 + 统一产物目录 + 维度口径 + 冒烟测试**
+
+### 新增
+- `scripts/parsers_registry.py`：6 类派生解析（浏览器/计划任务/EVTX/Prefetch/JumpList/Amcache）
+  统一注册，提供依赖检查、输入探测、按需执行、`--only` / `--force` / `--list`
+- 统一产物目录：所有派生结果写到 `<取证目录>/_derived/<name>/`，并生成
+  `_derived/manifest.json`（每个解析器的状态/耗时/摘要），不再往证据根目录散落 6 个目录
+- 旧布局（`_browser/`、`_evtx/` …）通过 `resolve_dir()` 自动回退，老包可直接复用
+- `tests/test_smoke.py`：4 类冒烟测试（注册表、空目录降级、旧布局兼容、全量分析 14 维）
+
+### 修复
+- **维度口径统一**：`dim_map` 把签名/打包器从 `advanced` 拆成独立维度，
+  现在 `dimensions_complete` 是 **14 个互不重复的维度**（此前 14 个条目里 `advanced` 重复 3 次）
+- `analyze_forensics.py` 里三段内联派生解析合并为一次 `ensure()` 调用，消除重复代码
+- SKILL.md / 使用说明中的「11 维」「9 维」等历史表述统一为 14 维
+- requirements 拆分：核心依赖与可选解析依赖（`requirements-optional.txt`）
+
+### 文档
+- SKILL.md 新增「数据流与产物」「降级矩阵」「性能档位」三节，维度表补数据来源列
+- 性能：冷跑 ~59s、热跑 ~13s、`IR_SKIP_HEAVY=1` ~12s
+
+## v5.9.1（2026-11-13）
+
+**补 CI：两个平台 × 两个 Python 版本**
+
+- `.github/workflows/tests.yml`：ubuntu-latest / windows-latest × py3.11 / py3.12
+  - 跑 `unittest discover -s tests`（5 个冒烟测试）
+  - 跑 `parsers_registry.py --list` 自检
+  - 可选解析依赖**故意不装**，用于验证"缺依赖时跳过而不崩"的降级路径
+
+## v5.10.0（2026-11-13）
+
+**把「加载了但没人分析」的 txt/csv 真正接进检测**
+
+### 背景
+可达性审计发现：实包 567 个文件里，433 个二进制产物已解析，但 100 个 txt/csv
+只是进了字符串池、没有任何维度专门判断；`browser_artifacts/deep/` 下的
+`cookies.sqlite` / `formhistory.sqlite` 也没被扫到。
+
+### 新增
+- `scripts/analyze_config.py`（第 7 个派生解析器，并入既有维度而非新增维度）
+  - **hosts**：自定义映射 + 是否屏蔽安全厂商域名
+  - **DNS 缓存**：命中 IOC 库域名/IP
+  - **Defender 排除项**：路径/进程/扩展名（采集失败时不误报）
+  - **BITS 任务**：含远程 URL 或进行中的传输
+  - **AppInit_DLLs / AppCertDlls**：非空即判（行内正则，避免跨行误吞）
+  - **管理员组**：成员列表 + 非默认成员提示
+  - **PATH**：包含可写目录（DLL/可执行劫持）
+  - **防火墙**：状态关闭
+  - **COM 劫持**：InprocServer32 落在 temp/public/programdata/downloads
+  - **BAM**：REG_BINARY 前 8 字节 FILETIME 解码 → 程序执行时间
+  - **下载目录**：可执行/脚本扩展名统计
+- 浏览器解析器：递归 `deep/` 子目录，新增 Firefox `moz_cookies`、`moz_formhistory`
+
+### 修复
+- 报告渲染对非账号/非 IP 类发现做字段兜底（原先配置类发现会 KeyError）
+- COM 劫持判定从「非系统目录」收紧到「落在可写目录」，避免把 WPS/OneDrive 误报
+
+### 实测（IR_DESKTOP-FJ8A0FE_20261113_144722）
+| 项目 | 结果 |
+|---|---|
+| 浏览器库 | 8 → **14 个**（含 deep/cookies.sqlite、formhistory.sqlite） |
+| Cookie / 表单 | 新增 `browser_cookies.csv`、`browser_formhistory.csv` |
+| 配置类发现 | hosts 劫持(medium)、管理员组(info)、下载目录 110 个 exe(medium)、BAM 73 条(info) |
+| 全量 | 14 维、**55 条发现**、评分 36 |
+
+## v5.11.0（2026-11-13）
+
+**按优先级补齐 6 处取证缺口（解析器 7 → 11 个）**
+
+### 1. 账号交叉验证（`analyze_accounts.py`）
+- `local_users.csv` 结构化（启用/密码时间/最后登录）
+- `hidden_account_crosscheck.txt`：**当所有账号都被标成「WMI 独有」时判定为对比失败**，
+  不再当成隐藏账号（本包即为此种情况）
+- 管理员组成员与账号表比对，出现查不到的成员 → 高危（隐藏管理员）
+
+### 2. 注册表导出结构化（`analyze_persistence_exports.py`）
+- Run / RunOnce / RunServices / IFEO / Winlogon / Services 全部结构化
+- IFEO 只认 `Debugger`（`MitigationOptions` 属正常缓解配置，不告警）
+- 实测：108 条（IFEO 53 / Run 22 / Winlogon 33），高危 0、中危 10
+
+### 3. SRUM（`analyze_srum.py`）
+- `dissect.esedb` 解析 SRUDB.dat：按程序统计收发字节 + 首末时间
+- 实测：**32,835 条记录、512 个程序**，≥100MB 外传 24 个（≥1GB 且非系统进程判高危）
+- 缺库时降级为字符串提取，并注明"未完整解析"
+
+### 4. 文件系统时间线（`analyze_filesystem.py`）
+- interesting_files / recent_files：双扩展名、临时/公共目录可执行、时间戳倒挂
+- 分级校准：下载/AppData 目录可执行降为中危（本包 999 条、可疑 425、高危 0）
+
+### 5. IIS 站点上下文（并入 `config`）
+- `iis_sites.txt` 被 appcmd 报错时记为证据缺口，而不是当成"没有站点"
+
+### 6. 采集清单校验（并入 `config`）
+- 解析 `collection_manifest.json` 的 modules/status/errors
+- 实测：3 个模块 partial（Volatile Data 超时、Defender/Sysmon 日志失败）→ 中危发现
+- 证据缺口从 7 处增至 **11 处**（含模块级缺口）
+
+### 修复
+- 报告渲染统一 `_normalize_findings()`：派生解析器的发现不再因缺字段触发 KeyError
+- `gaps` 初始化顺序错误导致 manifest 缺口被清空
+
+### 实测
+14 维、**61 条发现**、评分 36；11 个解析器全部成功；冷跑 68s

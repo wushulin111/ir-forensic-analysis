@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 应急响应取证分析主脚本 v2.2
-覆盖 11 维检测：进程 / 持久化 / 账号 / 网络 / Webshell / 注入 / 横向 / 高级对抗 / 仿冒签名 / 打包器 / 勒索
+覆盖 12 维检测：进程 / 持久化 / 账号 / 网络 / Webshell / 注入 / 横向 / 高级对抗 / 仿冒签名 / 打包器 / 勒索 / 浏览器取证
 读取 v5.4 采集包（含白加黑告警、签名清单、勒索扫描结果），输出 Markdown + Schema v2 JSON 摘要。
 """
 
@@ -191,7 +191,10 @@ class ForensicAnalyzer:
             "advanced_indicators": [],
             "signature_anomalies": [],
             "packer_indicators": [],
-            "ransomware_indicators": []
+            "ransomware_indicators": [],
+            "browser_traces": [],
+            "artifact_traces": [],
+            "evtx_traces": []
         }
         self.timeline = []
         self.ioc_extracted = {
@@ -253,8 +256,16 @@ class ForensicAnalyzer:
         return rules
 
     def load_all_txt_files(self):
-        """加载取证包中的 txt/log 原文与 csv 表格"""
+        """加载取证包中的 txt/log 原文与 csv 表格（含浏览器 SQLite 预解析）"""
         print("[*] 正在加载取证文件...")
+
+        # 六类非文本产物（浏览器 / 计划任务 / EVTX / Prefetch / JumpList / Amcache）
+        # 统一由 parsers_registry 解析到 _derived/<name>/，再走通用 CSV 加载。
+        try:
+            from parsers_registry import ensure as ensure_derived
+            ensure_derived(self.extracted_path, quiet=False)
+        except Exception as exc:  # noqa: BLE001
+            print(f"    [-] 派生解析失败：{exc}")
 
         for txt_file in self.extracted_path.rglob("*.txt"):
             try:
@@ -1143,6 +1154,332 @@ class ForensicAnalyzer:
 
         print(f"    [+] 发现 {len(self.findings['packer_indicators'])} 个打包器线索\n")
 
+    # ================= 安全配置与劫持面（并入既有维度） =================
+    DIM_BUCKET = {
+        "persistence": "persistence_mechanisms", "account": "anomaly_accounts",
+        "network": "suspicious_ips", "advanced": "advanced_indicators",
+        "signature": "signature_anomalies", "packer": "packer_indicators",
+        "artifact": "artifact_traces", "webshell": "webshell_traces",
+    }
+    # 除 config 外，其余派生解析器也产出 findings，统一在这里汇总
+    DERIVED_SUMMARIES = [
+        ("config", "security_config_summary.json"),
+        ("accounts", "accounts_summary.json"),
+        ("persistence_exports", "persistence_exports_summary.json"),
+        ("filesystem", "filesystem_summary.json"),
+        ("srum", "srum_summary.json"),
+    ]
+
+    def analyze_security_config(self):
+        """汇总所有派生解析器产出的 findings（config/accounts/注册表导出/文件系统/SRUM）。"""
+        from parsers_registry import resolve_dir as _resolve_dir
+        for folder, filename in self.DERIVED_SUMMARIES:
+            path = _resolve_dir(self.extracted_path, folder) / filename
+            if path.is_file():
+                self._merge_derived_findings(path)
+
+    def _merge_derived_findings(self, path):
+        try:
+            summary = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return
+        for item in summary.get("findings") or []:
+            bucket = self.DIM_BUCKET.get(str(item.get("dimension")))
+            if not bucket or bucket not in self.findings:
+                bucket = "advanced_indicators"
+            extra = {}
+            if bucket == "suspicious_ips":
+                extra = {"ip": item.get("name", "配置项"), "port": "-", "protocol": "-",
+                         "connection_type": "config"}
+            if bucket == "artifact_traces":
+                extra = {}
+            if bucket == "anomaly_accounts":
+                extra = {"username": item.get("name", "unknown"),
+                         "type": item.get("type", "config"),
+                         "privileges": "参考证据"}
+            self.findings[bucket].append({
+                **extra,
+                "name": item.get("name", "配置风险"),
+                "type": item.get("type", "config"),
+                "evidence": str(item.get("evidence", ""))[:300],
+                "risk_level": item.get("risk_level", "medium"),
+                "reason": item.get("reason", ""),
+                "confidence": float(item.get("confidence", 0.7)),
+                "mitre_attack": item.get("mitre_attack", ""),
+                "tag": "",
+            })
+
+    # ================= 维度14：Windows 事件日志 =================
+    def analyze_evtx(self):
+        from parsers_registry import resolve_dir as _resolve_dir
+        path = _resolve_dir(self.extracted_path, "evtx") / "evtx_summary.json"
+        if not path.is_file():
+            return
+        try:
+            summary = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return
+        for det in (summary.get("detections") or [])[:10]:
+            severity = str(det.get("severity", "medium")).lower()
+            if severity not in ("critical", "high", "medium", "low", "info"):
+                severity = "medium"
+            self.findings["evtx_traces"].append({
+                "name": det.get("title", "事件日志检测"),
+                "type": det.get("id", "evtx"),
+                "evidence": str(det.get("evidence", ""))[:300],
+                "risk_level": severity,
+                "reason": f"事件日志检测项，命中 {det.get('count', 0)} 次",
+                "confidence": 0.85,
+                "mitre_attack": "T1070" if det.get("id") == "log_cleared" else
+                                ("T1110" if det.get("id") in ("brute_force", "success_after_fail")
+                                 else "T1059"),
+                "tag": "",
+            })
+
+    # ================= 维度13：计划任务 / 注册表 / 书签 =================
+    def analyze_artifacts(self):
+        from parsers_registry import resolve_dir as _resolve_dir
+        summary_path = _resolve_dir(self.extracted_path, "artifacts") / "artifacts_summary.json"
+        if not summary_path.is_file():
+            return
+        try:
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return
+
+        tasks = summary.get("tasks") or []
+        high_tasks = [t for t in tasks if t.get("risk") == "high"]
+        medium_tasks = [t for t in tasks if t.get("risk") == "medium"]
+        if high_tasks:
+            self.findings["artifact_traces"].append({
+                "name": f"可疑计划任务（{len(high_tasks)} 个）",
+                "type": "scheduled_task",
+                "evidence": "；".join(
+                    f"{t.get('uri') or t.get('file')} → {(t.get('command') or '')[:50]}"
+                    for t in high_tasks[:3]),
+                "risk_level": "high",
+                "reason": "计划任务从临时/公共目录执行、或使用编码/转发类命令",
+                "confidence": 0.8,
+                "mitre_attack": "T1053.005",
+                "tag": "",
+            })
+        elif medium_tasks:
+            self.findings["artifact_traces"].append({
+                "name": f"脚本类计划任务（{len(medium_tasks)} 个，需人工确认）",
+                "type": "scheduled_task",
+                "evidence": "；".join((t.get("uri") or t.get("file") or "")[:40] for t in medium_tasks[:3]),
+                "risk_level": "low",
+                "reason": "计划任务调用 powershell/cmd 或脚本文件，属常见但需核对来源",
+                "confidence": 0.5,
+                "mitre_attack": "T1053.005",
+                "tag": "",
+            })
+
+        registry = summary.get("registry") or []
+        risky_reg = [e for e in registry if e.get("risk") in ("high", "critical")]
+        if risky_reg:
+            self.findings["artifact_traces"].append({
+                "name": f"高风险注册表项（{len(risky_reg)} 条）",
+                "type": "registry",
+                "evidence": "；".join(
+                    (e.get('section', '') or '')[:50] + "\\" + (e.get('name', '') or '')
+                    for e in risky_reg[:3]),
+                "risk_level": "high",
+                "reason": "自启动/服务/IFEO/Winlogon 位置被指向可写目录或脚本",
+                "confidence": 0.8,
+                "mitre_attack": "T1547.001",
+                "tag": "",
+            })
+
+        # ---- Prefetch：执行痕迹 ----
+        _resolve_dir = __import__("parsers_registry").resolve_dir
+        pf_path = _resolve_dir(self.extracted_path, "prefetch") / "prefetch_summary.json"
+        if pf_path.is_file():
+            try:
+                pf = json.loads(pf_path.read_text(encoding="utf-8"))
+                if pf.get("suspicious"):
+                    top = (pf.get("top_run") or [])[:3]
+                    self.findings["artifact_traces"].append({
+                        "name": f"Prefetch 可疑执行痕迹（{pf['suspicious']}/{pf.get('parsed', 0)}）",
+                        "type": "prefetch",
+                        "evidence": "；".join(
+                            f"{e.get('executable', '')}×{e.get('run_count') or '?'} "
+                            f"{(e.get('last_run') or '')}" for e in top),
+                        "risk_level": "medium",
+                        "reason": "程序从临时/用户目录执行，或由脚本解释器拉起",
+                        "confidence": 0.7,
+                        "mitre_attack": "T1204",
+                        "tag": "",
+                    })
+                elif pf.get("parsed"):
+                    self.findings["artifact_traces"].append({
+                        "name": f"Prefetch 执行记录 {pf['parsed']} 条",
+                        "type": "prefetch",
+                        "evidence": "_prefetch/prefetch.csv",
+                        "risk_level": "info",
+                        "reason": "可用于还原程序首次/末次执行时间",
+                        "confidence": 1.0,
+                        "mitre_attack": "T1204",
+                        "tag": "",
+                    })
+            except (OSError, ValueError):
+                pass
+
+        # ---- JumpList：最近访问文件 ----
+        _resolve_dir = __import__("parsers_registry").resolve_dir
+        jl_path = _resolve_dir(self.extracted_path, "jumplist") / "jumplist_summary.json"
+        if jl_path.is_file():
+            try:
+                jl = json.loads(jl_path.read_text(encoding="utf-8"))
+                if jl.get("suspicious"):
+                    self.findings["artifact_traces"].append({
+                        "name": f"JumpList 指向可疑位置（{jl['suspicious']} 条）",
+                        "type": "jumplist",
+                        "evidence": "；".join(
+                            str(p.get("path", ""))[:80]
+                            for p in (jl.get("top_paths") or [])[:3]),
+                        "risk_level": "low",
+                        "reason": "最近打开的文件位于临时/下载/公共目录",
+                        "confidence": 0.6,
+                        "mitre_attack": "T1070.004",
+                        "tag": "",
+                    })
+            except (OSError, ValueError):
+                pass
+
+        # ---- Amcache：执行过的程序 ----
+        _resolve_dir = __import__("parsers_registry").resolve_dir
+        am_path = _resolve_dir(self.extracted_path, "amcache") / "amcache_summary.json"
+        if am_path.is_file():
+            try:
+                am = json.loads(am_path.read_text(encoding="utf-8"))
+                if am.get("suspicious"):
+                    sample = [e for e in (am.get("entries") or [])
+                              if e.get("risk") == "medium"][:3]
+                    self.findings["artifact_traces"].append({
+                        "name": f"Amcache 可疑程序记录（{am['suspicious']}/{am.get('total', 0)}）",
+                        "type": "amcache",
+                        "evidence": "；".join(
+                            f"{e.get('name', '')[:40]} → {e.get('path', '')[:50]}"
+                            for e in sample),
+                        "risk_level": "medium",
+                        "reason": "执行过的程序位于临时/用户可写目录",
+                        "confidence": 0.65,
+                        "mitre_attack": "T1204",
+                        "tag": "",
+                    })
+                elif am.get("total"):
+                    self.findings["artifact_traces"].append({
+                        "name": f"Amcache 记录 {am['total']} 条（SHA1 {am.get('with_sha1', 0)}）",
+                        "type": "amcache",
+                        "evidence": "_amcache/amcache.csv",
+                        "risk_level": "info",
+                        "reason": "可用于程序执行痕迹与样本哈希比对",
+                        "confidence": 1.0,
+                        "mitre_attack": "T1204",
+                        "tag": "",
+                    })
+            except (OSError, ValueError):
+                pass
+
+        bookmarks = summary.get("counts", {}).get("bookmarks", 0)
+        if bookmarks:
+            self.findings["artifact_traces"].append({
+                "name": f"浏览器书签 {bookmarks} 条",
+                "type": "bookmarks",
+                "evidence": "_artifacts/browser_bookmarks_extra.csv",
+                "risk_level": "info",
+                "reason": "书签可用于溯源用户常访问站点",
+                "confidence": 1.0,
+                "mitre_attack": "T1217",
+                "tag": "",
+            })
+
+    # ================= 维度12：浏览器取证 =================
+    def analyze_browser(self):
+        """用 browser_artifacts 解析结果做检测：IOC 命中 / 高危下载 / 历史被清空。"""
+        from parsers_registry import resolve_dir as _resolve_dir
+        summary_path = _resolve_dir(self.extracted_path, "browser") / "browser_summary.json"
+        if not summary_path.is_file():
+            summary_path = self.extracted_path / "browser_summary.json"
+        if not summary_path.is_file():
+            return
+        try:
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return
+
+        if not summary.get("databases"):
+            return
+
+        # 1) 访问过威胁情报域名
+        hits = summary.get("ioc_hits") or []
+        if hits:
+            self.findings["browser_traces"].append({
+                "name": "浏览器访问了威胁情报域名",
+                "type": "browser_ioc",
+                "evidence": ", ".join(str(h.get("url", ""))[:80] for h in hits[:3]),
+                "risk_level": "critical",
+                "reason": f"浏览器历史中有 {len(hits)} 条记录命中 IOC 库域名/IP",
+                "confidence": 0.9,
+                "mitre_attack": "T1071.001",
+                "tag": "fox_tag",
+            })
+            for h in hits[:20]:
+                url = h.get("url", "")
+                if url and url not in self.ioc_extracted["domains"]:
+                    from urllib.parse import urlparse
+                    host = urlparse(url).hostname or ""
+                    if host:
+                        self.ioc_extracted["domains"].append(host)
+
+        # 2) 高危下载（可执行文件 / 临时目录 / 浏览器判危 / 明文 HTTP）
+        rows = self._csv("browser_downloads.csv")
+        risky = [r for r in rows if str(r.get("risk", "")).lower() in ("high", "critical")]
+        if risky:
+            ioc_hit = [r for r in risky if "威胁情报" in str(r.get("risk_reason", ""))]
+            severity = "high" if ioc_hit else "medium"
+            sample = "；".join(
+                f"{r.get('target_path', '')[:60]}（{r.get('risk_reason', '')[:30]}）"
+                for r in risky[:3])
+            self.findings["browser_traces"].append({
+                "name": f"浏览器下载可执行文件（{len(risky)} 条高风险记录）",
+                "type": "browser_download",
+                "evidence": sample,
+                "risk_level": severity,
+                "reason": "浏览器下载记录中存在可执行/脚本文件、临时目录落盘或被判危的下载",
+                "confidence": 0.7,
+                "mitre_attack": "T1105",
+                "tag": "",
+            })
+
+        # 3) 有库但历史为空（可能被清理）
+        if summary.get("history", 0) == 0 and summary.get("databases"):
+            self.findings["browser_traces"].append({
+                "name": "浏览器数据库存在但历史为空",
+                "type": "browser_empty",
+                "evidence": ", ".join(d.get("file", "") for d in summary["databases"][:3]),
+                "risk_level": "medium",
+                "reason": "采集到浏览器数据库但解析不出访问记录，存在被清理或加密的可能",
+                "confidence": 0.5,
+                "mitre_attack": "T1070.004",
+                "tag": "",
+            })
+
+        # 4) 汇总信息（低风险，便于报告里体现覆盖面）
+        self.findings["browser_traces"].append({
+            "name": f"浏览器取证：历史 {summary.get('history', 0)} 条 / 下载 {summary.get('downloads', 0)} 条"
+                    f" / 书签 {summary.get('bookmarks', 0)} 条",
+            "type": "browser_summary",
+            "evidence": f"时间范围 {summary.get('time_range', {}).get('start', '-')} ~ "
+                        f"{summary.get('time_range', {}).get('end', '-')}",
+            "risk_level": "info",
+            "reason": "浏览器访问/下载记录已解析，可用于时间线梳理与溯源",
+            "confidence": 1.0,
+            "mitre_attack": "T1217",
+            "tag": "",
+        })
+
     # ================= 维度11：勒索病毒 / 家族识别 =================
     def analyze_ransomware(self):
         print("[*] 正在分析勒索特征...")
@@ -1319,7 +1656,7 @@ class ForensicAnalyzer:
     def _build_summary(self, score, level, total_files, analyzed) -> dict:
         """按 REPORT_CONTRACT.md 的 Schema v2 生成机器可读摘要"""
         level_map = {"🔴 危急": "critical", "🟠 高危": "high", "🟡 中危": "medium", "🟢 低危": "low"}
-        rank = {"critical": 4, "high": 3, "medium": 2, "low": 1, "none": 0}
+        rank = {"critical": 4, "high": 3, "medium": 2, "low": 1, "info": 0, "none": 0}
         dim_map = {
             "suspicious_processes": "process",
             "persistence_mechanisms": "persistence",
@@ -1329,9 +1666,12 @@ class ForensicAnalyzer:
             "injection_indicators": "injection",
             "lateral_movement": "lateral",
             "advanced_indicators": "advanced",
-            "signature_anomalies": "advanced",
-            "packer_indicators": "advanced",
+            "signature_anomalies": "signature",
+            "packer_indicators": "packer",
             "ransomware_indicators": "ransomware",
+            "browser_traces": "browser",
+            "artifact_traces": "artifact",
+            "evtx_traces": "evtx",
         }
         findings = []
         actions = {"critical": [], "high": [], "medium": [], "low": []}
@@ -1361,7 +1701,7 @@ class ForensicAnalyzer:
                 })
                 if rank[sev] > rank[max_sev]:
                     max_sev = sev
-                if str(item.get("reason") or title):
+                if str(item.get("reason") or title) and sev in actions:
                     actions[sev].append(str(title)[:100])
 
         def _conf(c):
@@ -1409,7 +1749,7 @@ class ForensicAnalyzer:
                 "total_files": total_files,
                 "analyzed_files": analyzed,
                 "skipped_files": [],
-                "dimensions_complete": list(dim_map.values())[:11],
+                "dimensions_complete": list(dim_map.values()),
             },
             "config_risks": [],
             "actions": actions,
@@ -1427,8 +1767,49 @@ class ForensicAnalyzer:
             },
         }
 
+    def _normalize_findings(self):
+        """报告模板按维度取字段（command/username/ip/...）。派生解析器的发现
+        不带这些字段，统一在这里补默认值，避免渲染时 KeyError。"""
+        defaults = {
+            "command": None, "username": None, "privileges": "-", "ip": None,
+            "port": "-", "protocol": "-", "connection_type": "config",
+            "process": None, "family": None, "technique": "-", "path": "-",
+            "confidence": "-",
+            "description": "-",
+            "dest_ip": "-",
+            "dest_port": "-",
+            "evidence": "-",
+            "file_path": "-",
+            "files": "-",
+            "location": "-",
+            "mitre_attack": "-",
+            "name": "-",
+            "packer": "-",
+            "phase": "-",
+            "pid": "-",
+            "process_name": "-",
+            "reason": "-",
+            "risk_level": "-",
+            "signature_status": "-",
+            "signatures": "-",
+            "signer": "-",
+            "source_ip": "-",
+            "type": "-",
+        }
+        for bucket in self.findings.values():
+            for item in bucket:
+                label = (item.get("name") or item.get("type") or "-")
+                for key, value in defaults.items():
+                    if key in item and item[key] not in (None, ""):
+                        continue
+                    if key in ("command", "process", "family", "ip", "username"):
+                        item[key] = item.get(key) or label
+                    else:
+                        item.setdefault(key, value if value is not None else "-")
+
     def generate_report(self, output_dir: str):
         """生成应急报告"""
+        self._normalize_findings()
         print("[*] 正在生成应急报告...")
 
         output_path = Path(output_dir)
@@ -1510,7 +1891,9 @@ class ForensicAnalyzer:
             report_md += "| 用户名 | 类型 | 权限 | 风险等级 | ATT&CK | 说明 |\n"
             report_md += "|--------|------|------|----------|--------|------|\n"
             for a in self.findings['anomaly_accounts'][:20]:
-                report_md += f"| {a['username']} | {a['type']} | {a['privileges']} | {a['risk_level']} | {a.get('mitre_attack', '-')} | {a['reason']} |\n"
+                report_md += (f"| {a.get('username') or a.get('name') or '-'} | {a.get('type', '-')} | "
+                  f"{a.get('privileges', '-')} | {a.get('risk_level', '-')} | "
+                  f"{a.get('mitre_attack', '-')} | {a.get('reason', '')} |\n")
         else:
             report_md += "✅ 未发现异常账号\n"
 
@@ -1519,7 +1902,10 @@ class ForensicAnalyzer:
             report_md += "| IP地址 | 端口 | 协议 | 类型 | 风险等级 | ATT&CK | 说明 |\n"
             report_md += "|--------|------|------|------|----------|--------|------|\n"
             for ip in self.findings['suspicious_ips'][:30]:
-                report_md += f"| {ip['ip']} | {ip['port']} | {ip['protocol']} | {ip['connection_type']} | {ip['risk_level']} | {ip.get('mitre_attack', '-')} | {ip['reason']} |\n"
+                report_md += (f"| {ip.get('ip') or ip.get('name') or '-'} | {ip.get('port', '-')} | "
+                  f"{ip.get('protocol', '-')} | {ip.get('connection_type', 'config')} | "
+                  f"{ip.get('risk_level', '-')} | {ip.get('mitre_attack', '-')} | "
+                  f"{ip.get('reason', '')} |\n")
         else:
             report_md += "✅ 未发现可疑外联\n"
 
@@ -1865,7 +2251,11 @@ class ForensicAnalyzer:
                 "advanced": self.analyze_advanced,
                 "signature": self.analyze_signature,
                 "packer": self.analyze_packer,
-                "ransomware": self.analyze_ransomware
+                "ransomware": self.analyze_ransomware,
+                "browser": self.analyze_browser,
+                "artifact": self.analyze_artifacts,
+                "evtx": self.analyze_evtx,
+                "config": self.analyze_security_config
             }
             for cat in categories:
                 if cat in analysis_map:
@@ -1882,6 +2272,10 @@ class ForensicAnalyzer:
             self.analyze_signature()
             self.analyze_packer()
             self.analyze_ransomware()
+            self.analyze_browser()
+            self.analyze_artifacts()
+            self.analyze_evtx()
+            self.analyze_security_config()
 
         self.generate_report(output_dir)
         if update_rules:

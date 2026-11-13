@@ -10,7 +10,7 @@
 
 `ir-forensic-analysis` 是一个面向应急响应场景的自动化取证分析工具集，包含：
 
-- **分析引擎** — SKILL.md 驱动的 LLM 11 维深度分析
+- **分析引擎** — SKILL.md 驱动的 LLM 14 维深度分析
 - **Windows 采集脚本** — `IR_Collect_v5.4_GUI.exe` / `IR_Collect_v5.4.ps1`（默认深度取证，含 `-Target`、内存转储、日志恢复，PS4 兼容）+ `IR_Collect_PS2_GUI(老系统).exe`（PowerShell 2.0 精简版），管理员运行
 - **Linux 采集脚本** — `who.sh`（司稽 v8.1，sudo 运行）
 - **macOS 采集脚本** — `mac_collect.sh` v2.1（兼容 10.15+ / Intel+Apple Silicon，覆盖系统、网络、进程、持久化、账号、浏览器、日志、安全配置）
@@ -160,7 +160,7 @@ sudo ./assets/mac_collect.sh
 帮我分析这个 IR.zip
 ```
 
-AI 自动解压 → 数据预处理（timeline + Sigma + 情报查询）→ 11 维逐维分析 → 输出结构化报告。
+AI 自动解压 → 数据预处理（timeline + Sigma + 情报查询）→ 14 维逐维分析 → 输出结构化报告。
 
 ### 3. 命令行分析（可选）
 
