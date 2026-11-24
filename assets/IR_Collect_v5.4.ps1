@@ -220,6 +220,31 @@ function Copy-BrowserArtifact {
         return "[SKIP] $Label - locked"
     }
 }
+function Copy-BrowserDb {
+    param([string]$Source, [string]$Dest, [string]$Label)
+    # 浏览器开着时被独占锁定：普通复制失败后用 esentutl 卷影/底层读取兜底。
+    if (Test-Path -LiteralPath $Dest) { Remove-Item -LiteralPath $Dest -Force -ErrorAction SilentlyContinue }
+    $null = Copy-LockedEseFile -Source $Source -Dest $Dest -Label $Label
+    if (Test-Path -LiteralPath $Dest) {
+        Write-Log "[OK] Browser(db): $Label"
+        return "[OK] $Label"
+    }
+    Write-Log "[SKIP] Browser(db): $Label - locked"
+    return "[SKIP] $Label - locked"
+}
+function Copy-BrowserDbSet {
+    param([string]$DbPath, [string]$DestBase, [string]$Label)
+    # 主库 + WAL + SHM 一起采：WAL 里是最新的访问记录。
+    $results = @()
+    foreach ($suffix in @("", "-wal", "-shm")) {
+        $src = "$DbPath$suffix"
+        if (-not (Test-Path -LiteralPath $src)) { continue }
+        $dest = "$DestBase$suffix"
+        $results += (Copy-BrowserDb -Source $src -Dest $dest -Label "$Label$suffix")
+    }
+    return $results
+}
+
 function Copy-LockedEseFile {
     param([string]$Source, [string]$Dest, [string]$Label)
     try {
@@ -791,7 +816,7 @@ try {
          $memDir = Join-Path $DIR "8_memory\process_dumps"
          New-Item -ItemType Directory -Force -Path $memDir | Out-Null
          $memRows = New-Object System.Collections.ArrayList
-         $excluded = @('System','Registry','Secure System','Memory Compression','Idle','smss','csrss','wininit','services','lsass','svchost','fontdrvhost','winlogon','dwm')
+         $excluded = @('System','Registry','Secure System','Memory Compression','Idle','System Idle Process')  # 仅排除空闲/内核进程；svchost/lsass 等注入高发进程保留
          $candidates = @($procTree | Where-Object { $_.ProcessId -gt 4 -and $_.Name -and ($excluded -notcontains $_.Name) })
          foreach ($proc in $candidates) {
              $image = [string]$proc.ExecutablePath
@@ -802,14 +827,27 @@ try {
              $detail = ""
              try {
                  if (-not ("IRDumpNative" -as [type])) {
-                     Add-Type -TypeDefinition "using System; using System.Runtime.InteropServices; public static class IRDumpNative { [DllImport(`"dbghelp.dll`", SetLastError=true)] public static extern bool MiniDumpWriteDump(IntPtr process, uint processId, IntPtr file, uint dumpType, IntPtr exceptionParam, IntPtr userStreamParam, IntPtr callbackParam); }"
+                     Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+public static class IRDumpNative {
+  [DllImport("dbghelp.dll", SetLastError=true)]
+  public static extern bool MiniDumpWriteDump(IntPtr process, uint processId, IntPtr file, uint dumpType, IntPtr exceptionParam, IntPtr userStreamParam, IntPtr callbackParam);
+  [DllImport("kernel32.dll", SetLastError=true)]
+  public static extern IntPtr OpenProcess(uint access, bool inheritHandle, uint processId);
+  [DllImport("kernel32.dll", SetLastError=true)]
+  public static extern bool CloseHandle(IntPtr handle);
+}
+"@
                  }
-                 $live = Get-Process -Id $proc.ProcessId -ErrorAction Stop
+                  # 直接申请 VM_READ 权限，比 Get-Process.Handle 更可靠
+                  $hProc = [IRDumpNative]::OpenProcess(0x0410, $false, [uint32]$live.Id)
+                  if ($hProc -eq [IntPtr]::Zero) { throw ("OpenProcess failed: " + [Runtime.InteropServices.Marshal]::GetLastWin32Error()) }
                  $fs = [IO.File]::Create($dest)
                  try {
-                     $ok = [IRDumpNative]::MiniDumpWriteDump($live.Handle, [uint32]$live.Id, $fs.SafeFileHandle.DangerousGetHandle(), 2, [IntPtr]::Zero, [IntPtr]::Zero, [IntPtr]::Zero)
+                     $ok = [IRDumpNative]::MiniDumpWriteDump($hProc, [uint32]$live.Id, $fs.SafeFileHandle.DangerousGetHandle(), 2, [IntPtr]::Zero, [IntPtr]::Zero, [IntPtr]::Zero)
                      if (-not $ok) { throw ("MiniDumpWriteDump failed: " + [Runtime.InteropServices.Marshal]::GetLastWin32Error()) }
-                 } finally { $fs.Close() }
+                 } finally { $fs.Close(); [void][IRDumpNative]::CloseHandle($hProc) }
              } catch {
                  $state = "failed"
                  $detail = $_.Exception.Message
@@ -819,7 +857,18 @@ try {
          }
          if ($memRows.Count -eq 0) { [void]$memRows.Add([PSCustomObject]@{PID=''; Name=''; Image=''; ImageDeleted=''; CommandLine=''; State='none'; Detail='No eligible user process'}) }
          $memRows | Export-Csv (Join-Path $memDir "process_dumps.csv") -NoTypeInformation -Encoding UTF8
-         Write-Log "[OK] Process memory dump candidates: $($memRows.Count)"
+         $memOk = @($memRows | Where-Object { $_.State -eq "captured" }).Count
+         $memFail = @($memRows | Where-Object { $_.State -eq "failed" }).Count
+         Add-StageResult -ModuleId "8_memory" -Name "Process Memory Dumps" -Dir $memDir -Notes @("captured=$memOk failed=$memFail total=$($memRows.Count)") -ExpectOutput
+         if ($memFail -gt 0) {
+             $idx = $moduleStatus.Count - 1
+             if ($idx -ge 0 -and $moduleStatus[$idx].module_id -eq "8_memory") {
+                 $moduleStatus[$idx].status = "partial"
+                 $moduleStatus[$idx].error = "failed dumps: $memFail"
+             }
+         }
+         Write-Log "[OK] Process memory dumps: captured=$memOk failed=$memFail"
+
      }
 
     # --- netstat delayed comparison ---
@@ -1604,8 +1653,7 @@ try {
                     $dbPath = Join-Path $prof.FullName $bp.DB
                     if (Test-Path $dbPath) {
                         $dest = "$BA\${userName}_Firefox_$($prof.Name)_places.sqlite"
-                        try { Copy-Item $dbPath $dest -Force -ErrorAction Stop; $browserSummary += "[OK] $userName Firefox($($prof.Name)): $dbPath"; Write-Log "[OK] Browser: $userName Firefox($($prof.Name))" }
-                        catch { $browserSummary += "[SKIP] $userName Firefox($($prof.Name)): locked"; Write-Log "[SKIP] Browser: $userName Firefox($($prof.Name)) - locked" }
+                        $browserSummary += (Copy-BrowserDbSet -DbPath $dbPath -DestBase $dest -Label "$userName Firefox($($prof.Name)) places.sqlite")
                     }
                 }
             } else {
@@ -1613,8 +1661,7 @@ try {
                 foreach ($prof in $profiles) {
                     $dbPath = Join-Path $prof.FullName $bp.DB
                     $dest = "$BA\${userName}_$($bp.Name)_$($prof.Name)_history.db"
-                    try { Copy-Item $dbPath $dest -Force -ErrorAction Stop; $browserSummary += "[OK] $userName $($bp.Name)($($prof.Name)): $dbPath"; Write-Log "[OK] Browser: $userName $($bp.Name)($($prof.Name))" }
-                    catch { $browserSummary += "[SKIP] $userName $($bp.Name)($($prof.Name)): locked"; Write-Log "[SKIP] Browser: $userName $($bp.Name)($($prof.Name)) - locked" }
+                    $browserSummary += (Copy-BrowserDbSet -DbPath $dbPath -DestBase $dest -Label "$userName $($bp.Name)($($prof.Name)) History")
                 }
             }
         }
@@ -1639,7 +1686,12 @@ try {
                             if (-not $IncludeSensitive -and $ff -in @("logins.json","key4.db")) { continue }
                             $src = Join-Path $prof.FullName $ff
                             if (Test-Path $src) {
-                                $browserSummary += (Copy-BrowserArtifact -Source $src -Dest (Join-Path $deepDest $ff) -Label "$userName Firefox($($prof.Name)) $ff")
+                                $ffDest = Join-Path $deepDest $ff
+                                if ($ff -like "*.sqlite") {
+                                    $browserSummary += (Copy-BrowserDbSet -DbPath $src -DestBase $ffDest -Label "$userName Firefox($($prof.Name)) $ff")
+                                } else {
+                                    $browserSummary += (Copy-BrowserArtifact -Source $src -Dest $ffDest -Label "$userName Firefox($($prof.Name)) $ff")
+                                }
                             }
                         }
                     }
@@ -1654,7 +1706,12 @@ try {
                              $src = Join-Path $prof.FullName $cf
                              if (Test-Path -LiteralPath $src -PathType Leaf) {
                                  if (-not $copied) { New-Item -ItemType Directory -Force -Path $deepDest | Out-Null; $copied = $true }
-                                 $browserSummary += (Copy-BrowserArtifact -Source $src -Dest (Join-Path $deepDest $cf) -Label "$userName $($bp.Name)($($prof.Name)) $cf")
+                                 $cfDest = Join-Path $deepDest $cf
+                                 if ($cf -in @("Login Data","Cookies","Web Data","Downloads")) {
+                                     $browserSummary += (Copy-BrowserDbSet -DbPath $src -DestBase $cfDest -Label "$userName $($bp.Name)($($prof.Name)) $cf")
+                                 } else {
+                                     $browserSummary += (Copy-BrowserArtifact -Source $src -Dest $cfDest -Label "$userName $($bp.Name)($($prof.Name)) $cf")
+                                 }
                              }
                          }
                      }
